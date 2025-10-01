@@ -1,0 +1,20 @@
+syntax = "proto3";
+package emuspecs;
+
+option go_package = "github.com/siderolabs/omni-infra-provider-proxmox/api/specs";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// MachineSpec is stored in Omni in the infra provisioner state.
+message MachineSpec {
+  string uuid = 1;
+  string schematic = 2;
+  string talos_version = 3;
+  string volume_id = 4;
+  string node = 5;
+  string volume_upload_task = 6;
+  string vm_create_task = 7;
+  string vm_start_task = 8;
+  int32 vmid = 11;
+}

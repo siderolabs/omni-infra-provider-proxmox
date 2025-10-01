@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "cores": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "sockets": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "storage_selector": {
+      "type": "string",
+      "description": "CEL expression for selecting VM disk image storage"
+    },
+    "node": {
+      "type": "string",
+      "description": "Run the VM on a specific node"
+    },
+    "memory": {
+      "type": "integer",
+      "minimum": 2048
+    },
+    "disk_size": {
+      "type": "integer",
+      "minimum": 5,
+      "description": "In GB"
+    }
+  },
+  "required": [
+    "cores",
+    "memory",
+    "disk_size"
+  ]
+}

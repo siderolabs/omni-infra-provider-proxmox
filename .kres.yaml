@@ -1,0 +1,8 @@
+---
+kind: golang.Generate
+spec:
+  baseSpecPath: /api
+  vtProtobufEnabled: true
+  specs:
+    - source: api/specs/specs.proto
+      subdirectory: specs
