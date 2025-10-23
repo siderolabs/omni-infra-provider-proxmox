@@ -25,11 +25,21 @@
       "type": "integer",
       "minimum": 5,
       "description": "In GB"
+    },
+    "network_bridge": {
+      "type": "string",
+      "description": "Network bridge to attach to the VM, ex. vmbr0"
+    },
+    "vlan": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "VLAN tag"
     }
   },
   "required": [
     "cores",
     "memory",
-    "disk_size"
+    "disk_size",
+    "network_bridge"
   ]
 }

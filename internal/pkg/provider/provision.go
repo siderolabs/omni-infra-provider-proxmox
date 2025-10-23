@@ -270,6 +270,14 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return err
 			}*/
 
+			//Parse out the network config
+			var networkString string
+			if data.vlan == 0 {
+				networkString = fmt.Sprintf("virtio,bridge=%s,firewall=1", data.NetworkBridge)
+			} else {
+				networkString = fmt.Sprintf("virtio,bridge=%s,firewall=1,tag=%d", data.NetworkBridge, data.Vlan)
+			}
+
 			task, err := node.NewVirtualMachine(
 				ctx,
 				vmid,
@@ -316,7 +324,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				proxmox.VirtualMachineOption{
 					Name: "net0",
 					// TODO: we need to pick the networking
-					Value: "virtio,bridge=vmbr0,firewall=1",
+					Value: networkString,
 				},
 			)
 			if err != nil {
