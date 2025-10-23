@@ -114,7 +114,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			url = url.JoinPath("image",
 				pctx.State.TypedSpec().Value.Schematic,
 				pctx.GetTalosVersion(),
-				fmt.Sprintf("metal-amd64.iso"),
+				"metal-amd64.iso",
 			)
 
 			hash := sha256.New()
@@ -136,7 +136,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			storage, err = node.StorageISO(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to get storage: %s", err)
+				return fmt.Errorf("failed to get storage: %w", err)
 			}
 
 			_, err = storage.ISO(ctx, isoName)
@@ -251,7 +251,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			}
 
 			type DataSource struct {
-				NoCloud NoCloud `yaml:"NoCloud"`
+				NoCloud `yaml:"NoCloud"`
 			}
 
 			cloudInitConfig := struct {
@@ -262,7 +262,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						UserData:    pctx.ConnectionParams.JoinConfig,
 						NetworkData: `version: 1`,
 					},
-				},
 			}
 
 			joinConfig, err := yaml.Marshal(cloudInitConfig)
@@ -270,9 +269,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return err
 			}*/
 
-			//Parse out the network config
+			// Parse out the network config
 			var networkString string
-			if data.vlan == 0 {
+			if data.Vlan == 0 {
 				networkString = fmt.Sprintf("virtio,bridge=%s,firewall=1", data.NetworkBridge)
 			} else {
 				networkString = fmt.Sprintf("virtio,bridge=%s,firewall=1,tag=%d", data.NetworkBridge, data.Vlan)
@@ -343,6 +342,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				}
 			} else {
 				vm, err := p.getVM(ctx, pctx.State.TypedSpec().Value.Node, pctx.State.TypedSpec().Value.Vmid)
+
 				task, err := vm.Start(ctx)
 				if err != nil {
 					return err
