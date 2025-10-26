@@ -13,5 +13,5 @@ type Data struct {
 	DiskSize        int    `yaml:"disk_size"`
 	Sockets         int    `yaml:"sockets"`
 	Memory          uint64 `yaml:"memory"`
-	Vlan            uint64 `yaml:"vlan,omitempty"`
+	Vlan            uint64 `yaml:"vlan"`
 }

@@ -32,14 +32,15 @@
     },
     "vlan": {
       "type": "integer",
-      "minimum": 1,
-      "description": "VLAN tag"
+      "minimum": 0,
+      "description": "VLAN tag, set to 0 for none"
     }
   },
   "required": [
     "cores",
     "memory",
     "disk_size",
-    "network_bridge"
+    "network_bridge",
+    "vlan"
   ]
 }
