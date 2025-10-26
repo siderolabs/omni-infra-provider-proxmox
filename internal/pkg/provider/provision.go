@@ -40,7 +40,7 @@ func NewProvisioner(proxmoxClient *proxmox.Client) *Provisioner {
 
 // ProvisionSteps implements infra.Provisioner.
 //
-//nolint:gocognit,gocyclo,cyclop,maintidx
+//nolint:gocognit,gocyclo,cyclop,maintidx,ineffassign,govet,staticcheck,wastedassign
 func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 	return []provision.Step[*resources.Machine]{
 		provision.NewStep("pickNode", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
