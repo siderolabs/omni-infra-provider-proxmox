@@ -76,7 +76,7 @@ TOOLCHAIN ?= docker.io/golang:1.25-alpine
 
 # help menu
 
-export define HELP_MENU_HEADER
+define HELP_MENU_HEADER
 # Getting Started
 
 To build this project, you must have the following installed:
