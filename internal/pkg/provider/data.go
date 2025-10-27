@@ -8,8 +8,10 @@ package provider
 type Data struct {
 	Node            string `yaml:"node,omitempty"`
 	StorageSelector string `yaml:"storage_selector,omitempty"`
+	NetworkBridge   string `yaml:"network_bridge"`
 	Cores           int    `yaml:"cores"`
 	DiskSize        int    `yaml:"disk_size"`
 	Sockets         int    `yaml:"sockets"`
 	Memory          uint64 `yaml:"memory"`
+	Vlan            uint64 `yaml:"vlan"`
 }
