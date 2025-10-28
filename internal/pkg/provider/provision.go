@@ -114,7 +114,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			url = url.JoinPath("image",
 				pctx.State.TypedSpec().Value.Schematic,
 				pctx.GetTalosVersion(),
-				fmt.Sprintf("metal-amd64.iso"),
+				"metal-amd64.iso",
 			)
 
 			hash := sha256.New()
@@ -136,7 +136,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			storage, err = node.StorageISO(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to get storage: %s", err)
+				return fmt.Errorf("failed to get storage: %w", err)
 			}
 
 			_, err = storage.ISO(ctx, isoName)
@@ -212,19 +212,28 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			var selectedStorage string
 
 			for _, storage := range storages {
-				env, err := cel.NewEnv(
+				var env *cel.Env
+
+				env, err = cel.NewEnv(
 					cel.Variable("name", cel.StringType),
 					cel.Variable("node", cel.StringType),
 					cel.Variable("storageType", cel.StringType),
 					cel.Variable("availableSpace", cel.UintType),
 				)
-
-				expr, err := siderocel.ParseBooleanExpression(data.StorageSelector, env)
 				if err != nil {
 					return err
 				}
 
-				matched, err := expr.EvalBool(env, map[string]any{
+				var expr siderocel.Expression
+
+				expr, err = siderocel.ParseBooleanExpression(data.StorageSelector, env)
+				if err != nil {
+					return err
+				}
+
+				var matched bool
+
+				matched, err = expr.EvalBool(env, map[string]any{
 					"name":           storage.Name,
 					"node":           node.Name,
 					"storageType":    storage.Type,
@@ -244,31 +253,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			if selectedStorage == "" {
 				return fmt.Errorf("failed to pick the disk for the VM volume: no matches for the condition %q", data.StorageSelector)
 			}
-
-			/*type NoCloud struct {
-				UserData    string `yaml:"user-data"`
-				NetworkData string `yaml:"network-data"`
-			}
-
-			type DataSource struct {
-				NoCloud NoCloud `yaml:"NoCloud"`
-			}
-
-			cloudInitConfig := struct {
-				Datasource DataSource `yaml:"datasource"`
-			}{
-				Datasource: DataSource{
-					NoCloud: NoCloud{
-						UserData:    pctx.ConnectionParams.JoinConfig,
-						NetworkData: `version: 1`,
-					},
-				},
-			}
-
-			joinConfig, err := yaml.Marshal(cloudInitConfig)
-			if err != nil {
-				return err
-			}*/
 
 			task, err := node.NewVirtualMachine(
 				ctx,
@@ -335,6 +319,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				}
 			} else {
 				vm, err := p.getVM(ctx, pctx.State.TypedSpec().Value.Node, pctx.State.TypedSpec().Value.Vmid)
+				if err != nil {
+					return err
+				}
+
 				task, err := vm.Start(ctx)
 				if err != nil {
 					return err
