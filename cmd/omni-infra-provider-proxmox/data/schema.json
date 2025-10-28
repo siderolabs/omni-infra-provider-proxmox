@@ -30,6 +30,7 @@
   "required": [
     "cores",
     "memory",
-    "disk_size"
+    "disk_size",
+    "storage_selector"
   ]
 }
