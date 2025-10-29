@@ -340,7 +340,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 // Deprovision implements infra.Provisioner.
 func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machine *resources.Machine, machineRequest *infra.MachineRequest) error {
-	if machine == nil || machine.TypedSpec().Value.Vmid == 0 {
+	if machine.TypedSpec().Value.Vmid == 0 {
 		return nil
 	}
 
