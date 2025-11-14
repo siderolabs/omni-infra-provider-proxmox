@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/cel-go/cel"
@@ -361,6 +362,10 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 
 	vm, err := p.getVM(ctx, machine.TypedSpec().Value.Node, machine.TypedSpec().Value.Vmid)
 	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return nil
+		}
+
 		return err
 	}
 
