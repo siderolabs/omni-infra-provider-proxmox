@@ -158,6 +158,11 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			return provision.NewRetryInterval(time.Second)
 		}),
+		provision.NewStep("configureHostname", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			return pctx.CreateConfigPatch(ctx, "hostname", []byte(fmt.Sprintf(`machine:
+  network:
+    hostname: %s`, pctx.GetRequestID())))
+		}),
 		provision.NewStep("syncVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VmCreateTask != "" {
 				err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VmCreateTask)
