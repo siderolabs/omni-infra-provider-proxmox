@@ -79,7 +79,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		}),
 		provision.NewStep("createSchematic", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			// generating schematic with join configs as it's going to be used in the ISO image which doesn't support partial configs
-			schematic, err := pctx.GenerateSchematicID(ctx, logger)
+			schematic, err := pctx.GenerateSchematicID(ctx, logger,
+				provision.WithExtraExtensions("siderolabs/qemu-guest-agent"),
+			)
 			if err != nil {
 				return err
 			}
@@ -91,11 +93,15 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		provision.NewStep("uploadISO", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VolumeUploadTask != "" {
 				err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VolumeUploadTask)
-				if err != nil {
+				if err != nil && err.Error() != "stopped" {
 					return err
 				}
 
-				return nil
+				if err == nil {
+					return nil
+				}
+
+				logger.Info("retrying download")
 			}
 
 			pctx.State.TypedSpec().Value.TalosVersion = pctx.GetTalosVersion()
@@ -318,6 +324,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				proxmox.VirtualMachineOption{
 					Name:  "net0",
 					Value: networkString,
+				},
+				proxmox.VirtualMachineOption{
+					Name:  "agent",
+					Value: "enabled=true",
 				},
 			)
 			if err != nil {
