@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -58,15 +60,32 @@ var rootCmd = &cobra.Command{
 
 		var proxmoxConfig config.Config
 
-		configFile, err := os.Open(cfg.configFile)
-		if err != nil {
-			return fmt.Errorf("failed to read Proxmox config file %q", cfg.configFile)
+		if cfg.configFile != "" {
+			configFile, err := os.Open(cfg.configFile)
+			if err != nil {
+				return fmt.Errorf("failed to read Proxmox config file %q: %w", cfg.configFile, err)
+			}
+
+			decoder := yaml.NewDecoder(configFile)
+
+			if err = decoder.Decode(&proxmoxConfig); err != nil {
+				return fmt.Errorf("failed to decode Proxmox config file %q: %w", cfg.configFile, err)
+			}
+		} else {
+			proxmoxConfig.Proxmox.URL = cleanEnv(os.Getenv("PROXMOX_URL"))
+			proxmoxConfig.Proxmox.Username = cleanEnv(os.Getenv("PROXMOX_USERNAME"))
+			proxmoxConfig.Proxmox.Password = cleanEnv(os.Getenv("PROXMOX_PASSWORD"))
+			proxmoxConfig.Proxmox.Realm = cleanEnv(os.Getenv("PROXMOX_REALM"))
+			proxmoxConfig.Proxmox.TokenID = cleanEnv(os.Getenv("PROXMOX_TOKEN_ID"))
+			proxmoxConfig.Proxmox.TokenSecret = cleanEnv(os.Getenv("PROXMOX_TOKEN_SECRET"))
+			proxmoxConfig.Proxmox.Token = cleanEnv(os.Getenv("PROXMOX_TOKEN"))
+			if v := cleanEnv(os.Getenv("PROXMOX_INSECURE_SKIP_VERIFY")); v != "" {
+				proxmoxConfig.Proxmox.InsecureSkipVerify, _ = strconv.ParseBool(v)
+			}
 		}
 
-		decoder := yaml.NewDecoder(configFile)
-
-		if err = decoder.Decode(&proxmoxConfig); err != nil {
-			return fmt.Errorf("failed to read Proxmox config file %q", cfg.configFile)
+		if proxmoxConfig.Proxmox.URL == "" {
+			return fmt.Errorf("proxmox URL is required (set via config file or PROXMOX_URL env var)")
 		}
 
 		var opts []proxmox.Option
@@ -78,6 +97,8 @@ var rootCmd = &cobra.Command{
 				Password: proxmoxConfig.Proxmox.Password,
 				Realm:    proxmoxConfig.Proxmox.Realm,
 			}))
+		case proxmoxConfig.Proxmox.Token != "":
+			opts = append(opts, proxmox.WithAPIToken(proxmoxConfig.Proxmox.Token, ""))
 		case proxmoxConfig.Proxmox.TokenID != "" && proxmoxConfig.Proxmox.TokenSecret != "":
 			opts = append(opts, proxmox.WithAPIToken(proxmoxConfig.Proxmox.TokenID, proxmoxConfig.Proxmox.TokenSecret))
 		}
@@ -114,7 +135,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed to create infra provider: %w", err)
 		}
 
-		logger.Info("starting infra provider")
+		logger.Info("starting infra provider", zap.String("omniAPIEndpoint", cfg.omniAPIEndpoint))
 
 		clientOptions := []client.Option{
 			client.WithInsecureSkipTLSVerify(cfg.insecureSkipVerify),
@@ -153,14 +174,25 @@ func app() error {
 }
 
 func init() {
-	rootCmd.Flags().StringVar(&cfg.omniAPIEndpoint, "omni-api-endpoint", os.Getenv("OMNI_ENDPOINT"),
+	rootCmd.Flags().StringVar(&cfg.omniAPIEndpoint, "omni-api-endpoint", cleanEnv(os.Getenv("OMNI_ENDPOINT")),
 		"the endpoint of the Omni API, if not set, defaults to OMNI_ENDPOINT env var.")
 	rootCmd.Flags().StringVar(&meta.ProviderID, "id", meta.ProviderID, "the id of the infra provider, it is used to match the resources with the infra provider label.")
-	rootCmd.Flags().StringVar(&cfg.serviceAccountKey, "omni-service-account-key", os.Getenv("OMNI_SERVICE_ACCOUNT_KEY"), "Omni service account key, if not set, defaults to OMNI_SERVICE_ACCOUNT_KEY.")
+	rootCmd.Flags().StringVar(&cfg.serviceAccountKey, "omni-service-account-key", cleanEnv(os.Getenv("OMNI_SERVICE_ACCOUNT_KEY")), "Omni service account key, if not set, defaults to OMNI_SERVICE_ACCOUNT_KEY.")
 	rootCmd.Flags().StringVar(&cfg.providerName, "provider-name", "Proxmox", "provider name as it appears in Omni")
 	rootCmd.Flags().StringVar(&cfg.providerDescription, "provider-description", "Proxmox infrastructure provider", "Provider description as it appears in Omni")
 	rootCmd.Flags().BoolVar(&cfg.insecureSkipVerify, "insecure-skip-verify", false, "ignores untrusted certs on Omni side")
 
 	// Read everything into this config file
 	rootCmd.Flags().StringVar(&cfg.configFile, "config-file", "", "Proxmox provider config")
+}
+
+func cleanEnv(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
+		return v[1 : len(v)-1]
+	}
+	if len(v) >= 2 && v[0] == '\'' && v[len(v)-1] == '\'' {
+		return v[1 : len(v)-1]
+	}
+	return v
 }
