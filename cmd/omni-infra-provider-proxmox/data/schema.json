@@ -3,11 +3,13 @@
   "properties": {
     "cores": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "description": "Number of CPU cores per socket"
     },
     "sockets": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "description": "Number of CPU sockets"
     },
     "storage_selector": {
       "type": "string",
@@ -15,16 +17,17 @@
     },
     "node": {
       "type": "string",
-      "description": "Run the VM on a specific node"
+      "description": "Run the VM on a specific Proxmox node"
     },
     "memory": {
       "type": "integer",
-      "minimum": 2048
+      "minimum": 2048,
+      "description": "Memory in MB"
     },
     "disk_size": {
       "type": "integer",
       "minimum": 5,
-      "description": "In GB"
+      "description": "Disk size in GB"
     },
     "network_bridge": {
       "type": "string",
@@ -33,14 +36,180 @@
     "vlan": {
       "type": "integer",
       "minimum": 0,
-      "description": "VLAN tag, set to 0 for none"
+      "description": "VLAN tag for primary NIC, set to 0 for none"
+    },
+    "disk_ssd": {
+      "type": "boolean",
+      "description": "Enable SSD emulation (ssd=1) for better performance on SSD/NVMe storage"
+    },
+    "disk_discard": {
+      "type": "boolean",
+      "description": "Enable TRIM/discard support for thin-provisioned storage"
+    },
+    "disk_iothread": {
+      "type": "boolean",
+      "description": "Enable dedicated IO thread for better disk performance"
+    },
+    "disk_cache": {
+      "type": "string",
+      "enum": [
+        "none",
+        "writethrough",
+        "writeback",
+        "directsync",
+        "unsafe"
+      ],
+      "description": "Disk cache mode. Use 'none' for best performance with battery-backed storage"
+    },
+    "disk_aio": {
+      "type": "string",
+      "enum": [
+        "native",
+        "threads",
+        "io_uring"
+      ],
+      "description": "Async IO mode. Use 'io_uring' for best performance on modern kernels"
+    },
+    "cpu_type": {
+      "type": "string",
+      "description": "CPU type. Use 'host' for GPU passthrough/HPC, or 'x86-64-v2-AES' (default) for compatibility"
+    },
+    "machine_type": {
+      "type": "string",
+      "enum": [
+        "q35",
+        "i440fx"
+      ],
+      "description": "Machine type. Use 'q35' for GPU passthrough (native PCIe support)"
+    },
+    "numa": {
+      "type": "boolean",
+      "description": "Enable NUMA topology for better memory locality on multi-socket systems"
+    },
+    "hugepages": {
+      "type": "string",
+      "enum": [
+        "2MB",
+        "1GB"
+      ],
+      "description": "Enable hugepages for reduced TLB misses. Use '1GB' for GPU/HPC workloads"
+    },
+    "balloon": {
+      "type": "boolean",
+      "description": "Enable memory ballooning. Set to false for GPU passthrough or hugepages"
+    },
+    "additional_nics": {
+      "type": "array",
+      "description": "Additional network interfaces (e.g., for storage networks)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bridge": {
+            "type": "string",
+            "description": "Network bridge (e.g., vmbr1)"
+          },
+          "vlan": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional VLAN tag"
+          },
+          "firewall": {
+            "type": "boolean",
+            "description": "Enable Proxmox firewall for this NIC"
+          }
+        },
+        "required": [
+          "bridge"
+        ]
+      }
+    },
+    "pci_devices": {
+      "type": "array",
+      "description": "PCI devices to pass through using Proxmox Resource Mappings",
+      "items": {
+        "type": "object",
+        "properties": {
+          "mapping": {
+            "type": "string",
+            "description": "Proxmox Resource Mapping name (e.g., nvidia-gpu-1)"
+          },
+          "pcie": {
+            "type": "boolean",
+            "description": "Use PCIe mode instead of PCI (recommended for GPUs)"
+          },
+          "primary_gpu": {
+            "type": "boolean",
+            "description": "Set as primary GPU (x-vga=1) for display output"
+          },
+          "rombar": {
+            "type": "boolean",
+            "description": "Enable ROM BAR for device ROM"
+          }
+        },
+        "required": [
+          "mapping"
+        ]
+      }
+    },
+    "additional_disks": {
+      "type": "array",
+      "description": "Additional disks to attach to the VM (scsi1, scsi2, etc.)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "disk_size": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Disk size in GB"
+          },
+          "storage_selector": {
+            "type": "string",
+            "description": "CEL expression for selecting VM disk image storage for this disk"
+          },
+          "disk_ssd": {
+            "type": "boolean",
+            "description": "Enable SSD emulation for this disk"
+          },
+          "disk_discard": {
+            "type": "boolean",
+            "description": "Enable TRIM/discard support for this disk"
+          },
+          "disk_iothread": {
+            "type": "boolean",
+            "description": "Enable dedicated IO thread for this disk"
+          },
+          "disk_cache": {
+            "type": "string",
+            "enum": [
+              "none",
+              "writethrough",
+              "writeback",
+              "directsync",
+              "unsafe"
+            ],
+            "description": "Disk cache mode for this disk"
+          },
+          "disk_aio": {
+            "type": "string",
+            "enum": [
+              "native",
+              "threads",
+              "io_uring"
+            ],
+            "description": "Async IO mode for this disk"
+          }
+        },
+        "required": [
+          "disk_size",
+          "storage_selector"
+        ]
+      }
     }
   },
   "required": [
     "cores",
     "memory",
     "disk_size",
-    "storage_selector",
-    "network_bridge"
+    "storage_selector"
   ]
 }

@@ -216,56 +216,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return err
 			}
 
-			storages, err := node.Storages(ctx)
-			if err != nil {
-				return err
-			}
-
-			var selectedStorage string
-
-			for _, storage := range storages {
-				var env *cel.Env
-
-				env, err = cel.NewEnv(
-					cel.Variable("name", cel.StringType),
-					cel.Variable("node", cel.StringType),
-					cel.Variable("storageType", cel.StringType),
-					cel.Variable("availableSpace", cel.UintType),
-				)
-				if err != nil {
-					return err
-				}
-
-				var expr siderocel.Expression
-
-				expr, err = siderocel.ParseBooleanExpression(data.StorageSelector, env)
-				if err != nil {
-					return err
-				}
-
-				var matched bool
-
-				matched, err = expr.EvalBool(env, map[string]any{
-					"name":           storage.Name,
-					"node":           node.Name,
-					"storageType":    storage.Type,
-					"availableSpace": storage.Avail,
-				})
-				if err != nil {
-					return err
-				}
-
-				if matched {
-					selectedStorage = storage.Name
-
-					break
-				}
-			}
-
-			if selectedStorage == "" {
-				return fmt.Errorf("failed to pick the disk for the VM volume: no matches for the condition %q", data.StorageSelector)
-			}
-
 			if data.NetworkBridge == "" {
 				data.NetworkBridge = "vmbr0"
 			}
@@ -278,58 +228,220 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				networkString = fmt.Sprintf("virtio,bridge=%s,firewall=1,tag=%d", data.NetworkBridge, data.Vlan)
 			}
 
-			task, err := node.NewVirtualMachine(
-				ctx,
-				vmid,
-				proxmox.VirtualMachineOption{
+			// Build primary disk options
+			selectedStorage, err := p.pickStorage(ctx, node, data.StorageSelector)
+			if err != nil {
+				return err
+			}
+
+			diskOptions := []string{fmt.Sprintf("%s:%d", selectedStorage, data.DiskSize)}
+			if data.DiskSSD {
+				diskOptions = append(diskOptions, "ssd=1")
+			}
+
+			if data.DiskDiscard {
+				diskOptions = append(diskOptions, "discard=on")
+			}
+
+			if data.DiskIOThread {
+				diskOptions = append(diskOptions, "iothread=1")
+			}
+
+			if data.DiskCache != "" {
+				diskOptions = append(diskOptions, fmt.Sprintf("cache=%s", data.DiskCache))
+			}
+
+			if data.DiskAIO != "" {
+				diskOptions = append(diskOptions, fmt.Sprintf("aio=%s", data.DiskAIO))
+			}
+
+			diskString := strings.Join(diskOptions, ",")
+
+			// Determine CPU type (default to x86-64-v2-AES for compatibility)
+			cpuType := "x86-64-v2-AES"
+			if data.CPUType != "" {
+				cpuType = data.CPUType
+			}
+
+			// Build VM options
+			vmOptions := []proxmox.VirtualMachineOption{
+				{
 					Name:  "smbios1",
 					Value: "uuid=" + pctx.State.TypedSpec().Value.Uuid,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "name",
 					Value: pctx.GetRequestID(),
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "cdrom",
 					Value: iso.VolID,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "cpu",
-					Value: "x86-64-v2-AES",
+					Value: cpuType,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "cores",
 					Value: data.Cores,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "sockets",
 					Value: data.Sockets,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "memory",
 					Value: data.Memory,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "scsi0",
-					Value: fmt.Sprintf("%s:%d", selectedStorage, data.DiskSize),
+					Value: diskString,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "scsihw",
 					Value: "virtio-scsi-single",
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "onboot",
 					Value: 1,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "net0",
 					Value: networkString,
 				},
-				proxmox.VirtualMachineOption{
+				{
 					Name:  "agent",
 					Value: "enabled=true",
 				},
-			)
+			}
+
+			// Primary disk is always scsi0. Additional disks start from scsi1.
+			for i, disk := range data.AdditionalDisks {
+				var storage string
+
+				storage, err = p.pickStorage(ctx, node, disk.StorageSelector)
+				if err != nil {
+					return fmt.Errorf("failed to pick storage for additional disk %d: %w", i+1, err)
+				}
+
+				opts := []string{fmt.Sprintf("%s:%d", storage, disk.DiskSize)}
+				if disk.DiskSSD {
+					opts = append(opts, "ssd=1")
+				}
+
+				if disk.DiskDiscard {
+					opts = append(opts, "discard=on")
+				}
+
+				if disk.DiskIOThread {
+					opts = append(opts, "iothread=1")
+				}
+
+				if disk.DiskCache != "" {
+					opts = append(opts, fmt.Sprintf("cache=%s", disk.DiskCache))
+				}
+
+				if disk.DiskAIO != "" {
+					opts = append(opts, fmt.Sprintf("aio=%s", disk.DiskAIO))
+				}
+
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  fmt.Sprintf("scsi%d", i+1),
+					Value: strings.Join(opts, ","),
+				})
+			}
+
+			// Add machine type if specified (q35 for GPU passthrough)
+			if data.MachineType != "" {
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  "machine",
+					Value: data.MachineType,
+				})
+			}
+
+			// Add NUMA if enabled
+			if data.NUMA {
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  "numa",
+					Value: 1,
+				})
+			}
+
+			// Add hugepages if specified (Proxmox expects: "any", "2" for 2MB, "1024" for 1GB)
+			if data.Hugepages != "" {
+				var hugepagesStr string
+
+				switch data.Hugepages {
+				case "2MB", "2":
+					hugepagesStr = "2"
+				case "1GB", "1024":
+					hugepagesStr = "1024"
+				case "any":
+					hugepagesStr = "any"
+				default:
+					hugepagesStr = data.Hugepages
+				}
+
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  "hugepages",
+					Value: hugepagesStr,
+				})
+			}
+
+			// Disable balloon if explicitly set to false (for GPU/hugepages)
+			if data.Balloon != nil && !*data.Balloon {
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  "balloon",
+					Value: 0,
+				})
+			}
+
+			// Add additional NICs for storage/backup networks
+			for i, nic := range data.AdditionalNICs {
+				var nicString string
+
+				firewallVal := 0
+				if nic.Firewall {
+					firewallVal = 1
+				}
+
+				if nic.Vlan == 0 {
+					nicString = fmt.Sprintf("virtio,bridge=%s,firewall=%d", nic.Bridge, firewallVal)
+				} else {
+					nicString = fmt.Sprintf("virtio,bridge=%s,firewall=%d,tag=%d", nic.Bridge, firewallVal, nic.Vlan)
+				}
+
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  fmt.Sprintf("net%d", i+1), // net1, net2, etc.
+					Value: nicString,
+				})
+			}
+
+			// Add PCI device passthrough using Resource Mappings
+			for i, pci := range data.PCIDevices {
+				var pciParts []string
+
+				pciParts = append(pciParts, fmt.Sprintf("mapping=%s", pci.Mapping))
+				if pci.PCIExpress {
+					pciParts = append(pciParts, "pcie=1")
+				}
+
+				if pci.PrimaryGPU {
+					pciParts = append(pciParts, "x-vga=1")
+				}
+
+				if pci.ROMBar {
+					pciParts = append(pciParts, "rombar=1")
+				}
+
+				pciString := strings.Join(pciParts, ",")
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  fmt.Sprintf("hostpci%d", i), // hostpci0, hostpci1, etc.
+					Value: pciString,
+				})
+			}
+
+			task, err := node.NewVirtualMachine(ctx, vmid, vmOptions...)
 			if err != nil {
 				return err
 			}
@@ -403,6 +515,46 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 	}
 
 	return nil
+}
+
+func (p *Provisioner) pickStorage(ctx context.Context, node *proxmox.Node, selector string) (string, error) {
+	storages, err := node.Storages(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	for _, storage := range storages {
+		env, err := cel.NewEnv(
+			cel.Variable("name", cel.StringType),
+			cel.Variable("node", cel.StringType),
+			cel.Variable("storageType", cel.StringType),
+			cel.Variable("availableSpace", cel.UintType),
+		)
+		if err != nil {
+			return "", err
+		}
+
+		expr, err := siderocel.ParseBooleanExpression(selector, env)
+		if err != nil {
+			return "", err
+		}
+
+		matched, err := expr.EvalBool(env, map[string]any{
+			"name":           storage.Name,
+			"node":           node.Name,
+			"storageType":    storage.Type,
+			"availableSpace": storage.Avail,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		if matched {
+			return storage.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("failed to pick the disk: no matches for the condition %q", selector)
 }
 
 func (p *Provisioner) getVM(ctx context.Context, nodeName string, vmid int32) (*proxmox.VirtualMachine, error) {
