@@ -45,19 +45,45 @@ func NewProvisioner(proxmoxClient *proxmox.Client) *Provisioner {
 func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 	return []provision.Step[*resources.Machine]{
 		provision.NewStep("pickNode", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			var data Data
+
+			if err := pctx.UnmarshalProviderData(&data); err != nil {
+				return err
+			}
+
 			nodes, err := p.proxmoxClient.Nodes(ctx)
 			if err != nil {
 				return err
 			}
 
+			if len(nodes) == 0 {
+				return fmt.Errorf("no nodes available")
+			}
+
+			// If user specified a node, validate and use it
+			if data.Node != "" {
+				for _, node := range nodes {
+					if node.Node == data.Node {
+						if node.Status != "online" {
+							return fmt.Errorf("specified node %q is not online (status: %s)", data.Node, node.Status)
+						}
+
+						pctx.State.TypedSpec().Value.Node = data.Node
+
+						logger.Info("using configured node for the Proxmox VM", zap.String("node", data.Node))
+
+						return nil
+					}
+				}
+
+				return fmt.Errorf("specified node %q not found in cluster", data.Node)
+			}
+
+			// Auto-pick node with most free memory
 			var (
 				maxFree  uint64
 				nodeName string
 			)
-
-			if len(nodes) == 0 {
-				return fmt.Errorf("no nodes available")
-			}
 
 			for _, node := range nodes {
 				if node.Status != "online" {
@@ -73,7 +99,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			pctx.State.TypedSpec().Value.Node = nodeName
 
-			logger.Info("picked the node for the Proxmox VM", zap.String("node", nodeName))
+			logger.Info("auto-selected node for the Proxmox VM", zap.String("node", nodeName))
 
 			return nil
 		}),
