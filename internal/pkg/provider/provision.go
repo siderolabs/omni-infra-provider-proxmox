@@ -23,6 +23,7 @@ import (
 	"github.com/siderolabs/omni/client/pkg/omni/resources/infra"
 	siderocel "github.com/siderolabs/talos/pkg/machinery/cel"
 	"go.uber.org/zap"
+	"golang.org/x/mod/semver"
 
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/resources"
 )
@@ -165,9 +166,28 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			return provision.NewRetryInterval(time.Second)
 		}),
 		provision.NewStep("configureHostname", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-			return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), []byte(fmt.Sprintf(`machine:
+			talosVersion := pctx.GetTalosVersion()
+			hostnamePatch := fmt.Sprintf(`machine:
   network:
-    hostname: %s`, pctx.GetRequestID())))
+    hostname: %s`, pctx.GetRequestID())
+
+			if talosVersion != "" {
+				v := talosVersion
+				if !strings.HasPrefix(v, "v") {
+					v = "v" + v
+				}
+
+				if semver.IsValid(v) {
+					if semver.Compare(v, "v1.12.0") >= 0 {
+						hostnamePatch = fmt.Sprintf(`apiVersion: v1alpha1
+kind: HostnameConfig
+hostname: %s
+auto: off`, pctx.GetRequestID())
+					}
+				}
+			}
+
+			return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), []byte(hostnamePatch))
 		}),
 		provision.NewStep("syncVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VmCreateTask != "" {
