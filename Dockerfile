@@ -1,22 +1,22 @@
-# syntax = docker/dockerfile-upstream:1.19.0-labs
+# syntax = docker/dockerfile-upstream:1.20.0-labs
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2025-10-28T12:17:34Z by kres 46e133d.
+# Generated on 2026-01-23T11:35:58Z by kres 1ffefb6.
 
-ARG TOOLCHAIN
+ARG TOOLCHAIN=scratch
 
-FROM ghcr.io/siderolabs/ca-certificates:v1.11.0 AS image-ca-certificates
+FROM ghcr.io/siderolabs/ca-certificates:v1.12.0 AS image-ca-certificates
 
-FROM ghcr.io/siderolabs/fhs:v1.11.0 AS image-fhs
+FROM ghcr.io/siderolabs/fhs:v1.12.0 AS image-fhs
 
 # runs markdownlint
-FROM docker.io/oven/bun:1.3.0-alpine AS lint-markdown
+FROM docker.io/oven/bun:1.3.6-alpine AS lint-markdown
 WORKDIR /src
-RUN bun i markdownlint-cli@0.45.0 sentences-per-line@0.3.0
+RUN bun i markdownlint-cli@0.47.0 sentences-per-line@0.5.0
 COPY .markdownlint.json .
 COPY ./README.md ./README.md
-RUN bunx markdownlint --ignore "CHANGELOG.md" --ignore "**/node_modules/**" --ignore '**/hack/chglog/**' --rules sentences-per-line .
+RUN bunx markdownlint --ignore "CHANGELOG.md" --ignore "**/node_modules/**" --ignore '**/hack/chglog/**' --rules markdownlint-sentences-per-line .
 
 # collects proto specs
 FROM scratch AS proto-specs
@@ -141,15 +141,27 @@ COPY --from=generate / /
 WORKDIR /src/cmd/omni-infra-provider-proxmox
 ARG GO_BUILDFLAGS
 ARG GO_LDFLAGS
-RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-proxmox/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-proxmox/go/pkg go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-proxmox-linux-amd64
+RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-proxmox/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-proxmox/go/pkg GOARCH=amd64 GOOS=linux go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-proxmox-linux-amd64
+
+# builds omni-infra-provider-proxmox-linux-arm64
+FROM base AS omni-infra-provider-proxmox-linux-arm64-build
+COPY --from=generate / /
+WORKDIR /src/cmd/omni-infra-provider-proxmox
+ARG GO_BUILDFLAGS
+ARG GO_LDFLAGS
+RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-proxmox/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-proxmox/go/pkg GOARCH=arm64 GOOS=linux go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-proxmox-linux-arm64
 
 FROM scratch AS omni-infra-provider-proxmox-linux-amd64
 COPY --from=omni-infra-provider-proxmox-linux-amd64-build /omni-infra-provider-proxmox-linux-amd64 /omni-infra-provider-proxmox-linux-amd64
+
+FROM scratch AS omni-infra-provider-proxmox-linux-arm64
+COPY --from=omni-infra-provider-proxmox-linux-arm64-build /omni-infra-provider-proxmox-linux-arm64 /omni-infra-provider-proxmox-linux-arm64
 
 FROM omni-infra-provider-proxmox-linux-${TARGETARCH} AS omni-infra-provider-proxmox
 
 FROM scratch AS omni-infra-provider-proxmox-all
 COPY --from=omni-infra-provider-proxmox-linux-amd64 / /
+COPY --from=omni-infra-provider-proxmox-linux-arm64 / /
 
 FROM scratch AS image-omni-infra-provider-proxmox
 ARG TARGETARCH

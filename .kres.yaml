@@ -6,3 +6,20 @@ spec:
   specs:
     - source: api/specs/specs.proto
       subdirectory: specs
+---
+kind: golang.Build
+name: omni-infra-provider-proxmox
+spec:
+  outputs:
+    linux-amd64:
+      GOOS: linux
+      GOARCH: amd64
+    linux-arm64:
+      GOOS: linux
+      GOARCH: arm64
+---
+kind: common.Image
+name: image-omni-infra-provider-proxmox
+spec:
+  extraEnvironment:
+    PLATFORM: linux/amd64,linux/arm64
