@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/google/cel-go/cel"
 	"github.com/google/uuid"
 	"github.com/luthermonson/go-proxmox"
@@ -26,6 +27,33 @@ import (
 
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/resources"
 )
+
+// talos112 is the minimum version that requires HostnameConfig instead of machine.network.hostname
+var talos112 = semver.MustParse("1.12.0")
+
+// GenerateHostnameConfig returns the appropriate hostname configuration patch
+// based on the Talos version. Talos 1.12+ uses the new HostnameConfig resource,
+// while older versions use machine.network.hostname.
+func GenerateHostnameConfig(talosVersion, hostname string) []byte {
+	version, err := semver.ParseTolerant(talosVersion)
+	if err != nil {
+		// If version parsing fails, use the new format (safer default for newer Talos)
+		return fmt.Appendf(nil, `apiVersion: v1alpha1
+kind: HostnameConfig
+hostname: %s`, hostname)
+	}
+
+	if version.GTE(talos112) {
+		return fmt.Appendf(nil, `apiVersion: v1alpha1
+kind: HostnameConfig
+hostname: %s`, hostname)
+	}
+
+	// Legacy format for Talos < 1.12
+	return fmt.Appendf(nil, `machine:
+  network:
+    hostname: %s`, hostname)
+}
 
 // Provisioner implements Talos emulator infra provider.
 type Provisioner struct {
@@ -191,9 +219,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			return provision.NewRetryInterval(time.Second)
 		}),
 		provision.NewStep("configureHostname", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-			return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), fmt.Appendf(nil, `machine:
-  network:
-    hostname: %s`, pctx.GetRequestID()))
+			hostname := pctx.GetRequestID()
+			config := GenerateHostnameConfig(pctx.GetTalosVersion(), hostname)
+
+			return pctx.CreateConfigPatch(ctx, "000-hostname-"+hostname, config)
 		}),
 		provision.NewStep("syncVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VmCreateTask != "" {
