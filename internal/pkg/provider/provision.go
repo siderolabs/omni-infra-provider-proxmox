@@ -107,6 +107,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			// generating schematic with join configs as it's going to be used in the ISO image which doesn't support partial configs
 			schematic, err := pctx.GenerateSchematicID(ctx, logger,
 				provision.WithExtraExtensions("siderolabs/qemu-guest-agent"),
+				provision.WithoutConnectionParams(),
 			)
 			if err != nil {
 				return err
@@ -147,7 +148,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			url = url.JoinPath("image",
 				pctx.State.TypedSpec().Value.Schematic,
 				pctx.GetTalosVersion(),
-				"metal-amd64.iso",
+				"nocloud-amd64.iso",
 			)
 
 			hash := sha256.New()
@@ -189,11 +190,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			pctx.State.TypedSpec().Value.VolumeUploadTask = string(task.UPID)
 
 			return provision.NewRetryInterval(time.Second)
-		}),
-		provision.NewStep("configureHostname", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-			return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), fmt.Appendf(nil, `machine:
-  network:
-    hostname: %s`, pctx.GetRequestID()))
 		}),
 		provision.NewStep("syncVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VmCreateTask != "" {
@@ -486,6 +482,23 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				vm, err := p.getVM(ctx, pctx.State.TypedSpec().Value.Node, pctx.State.TypedSpec().Value.Vmid)
 				if err != nil {
 					return err
+				}
+
+				err = vm.CloudInit(ctx,
+					"ide0",
+					pctx.ConnectionParams.JoinConfig,
+					fmt.Sprintf(`instance-id: %s
+local-hostname: %s
+hostname: %s`,
+						pctx.State.TypedSpec().Value.Uuid,
+						pctx.GetRequestID(),
+						pctx.GetRequestID(),
+					),
+					"",
+					"version: 1",
+				)
+				if err != nil {
+					return fmt.Errorf("failed to inject nocloud config: %w", err)
 				}
 
 				task, err := vm.Start(ctx)
