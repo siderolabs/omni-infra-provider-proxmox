@@ -6,12 +6,14 @@
 package provider
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,6 +28,8 @@ import (
 
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/resources"
 )
+
+const machineRequestTagPrefix = "machine-request."
 
 // Provisioner implements Talos emulator infra provider.
 type Provisioner struct {
@@ -79,27 +83,40 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return fmt.Errorf("specified node %q not found in cluster", data.Node)
 			}
 
-			// Auto-pick node with most free memory
-			var (
-				maxFree  uint64
-				nodeName string
-			)
+			nodeInfoList := make([]nodeStatus, 0, len(nodes))
 
 			for _, node := range nodes {
-				if node.Status != "online" {
-					continue
+				var ns nodeStatus
+
+				ns.Name = node.Node
+				ns.MemoryFree = float64(node.MaxMem-node.Mem) / float64(node.MaxMem)
+
+				if machineRequestSet, ok := pctx.GetMachineRequestSetID(); ok {
+					n, err := p.proxmoxClient.Node(ctx, node.Node)
+					if err != nil {
+						return fmt.Errorf("failed to get node %q, %w", node.Node, err)
+					}
+
+					vms, err := n.VirtualMachines(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to get vms for now %q, %w", node.Node, err)
+					}
+
+					for _, vm := range vms {
+						if vm.HasTag(machineRequestTagPrefix + machineRequestSet) {
+							ns.SameMachineRequestSetVMs += 1
+						}
+					}
 				}
 
-				freeMem := node.MaxMem - node.Mem
-				if freeMem > maxFree {
-					maxFree = freeMem
-					nodeName = node.Node
-				}
+				nodeInfoList = append(nodeInfoList, ns)
 			}
 
-			pctx.State.TypedSpec().Value.Node = nodeName
+			pickedNode := pickNode(nodeInfoList)
 
-			logger.Info("auto-selected node for the Proxmox VM", zap.String("node", nodeName))
+			pctx.State.TypedSpec().Value.Node = pickedNode.Name
+
+			logger.Info("auto-selected node for the Proxmox VM", zap.String("node", pickedNode.Name))
 
 			return nil
 		}),
@@ -335,6 +352,15 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					Name:  "agent",
 					Value: "enabled=true",
 				},
+			}
+
+			if machineRequestSet, ok := pctx.GetMachineRequestSetID(); ok {
+				vmOptions = append(vmOptions,
+					proxmox.VirtualMachineOption{
+						Name:  "tags",
+						Value: machineRequestTagPrefix + machineRequestSet,
+					},
+				)
 			}
 
 			// Primary disk is always scsi0. Additional disks start from scsi1.
@@ -644,4 +670,23 @@ func (p *Provisioner) waitForTaskToFinish(ctx context.Context, t *proxmox.Task) 
 			}
 		}
 	}
+}
+
+type nodeStatus struct {
+	Name                     string
+	MemoryFree               float64
+	SameMachineRequestSetVMs int
+}
+
+func pickNode(nodeInfoList []nodeStatus) nodeStatus {
+	// Auto-pick node with most free memory and with the least number of machines from the same machine request set
+	slices.SortFunc(nodeInfoList, func(a, b nodeStatus) int {
+		if c := cmp.Compare(a.SameMachineRequestSetVMs, b.SameMachineRequestSetVMs); c != 0 {
+			return c
+		}
+
+		return -cmp.Compare(a.MemoryFree, b.MemoryFree)
+	})
+
+	return nodeInfoList[0]
 }

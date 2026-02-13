@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2026-01-23T11:35:58Z by kres 1ffefb6.
+# Generated on 2026-02-13T12:22:16Z by kres 6458cfd.
 
 # common variables
 
@@ -19,15 +19,15 @@ REGISTRY ?= ghcr.io
 USERNAME ?= siderolabs
 REGISTRY_AND_USERNAME ?= $(REGISTRY)/$(USERNAME)
 PROTOBUF_GO_VERSION ?= 1.36.11
-GRPC_GO_VERSION ?= 1.6.0
-GRPC_GATEWAY_VERSION ?= 2.27.4
+GRPC_GO_VERSION ?= 1.6.1
+GRPC_GATEWAY_VERSION ?= 2.27.8
 VTPROTOBUF_VERSION ?= 0.6.0
-GOIMPORTS_VERSION ?= 0.41.0
+GOIMPORTS_VERSION ?= 0.42.0
 GOMOCK_VERSION ?= 0.6.0
 DEEPCOPY_VERSION ?= v0.5.8
-GOLANGCILINT_VERSION ?= v2.8.0
+GOLANGCILINT_VERSION ?= v2.9.0
 GOFUMPT_VERSION ?= v0.9.2
-GO_VERSION ?= 1.25.6
+GO_VERSION ?= 1.26.0
 GO_BUILDFLAGS ?=
 GO_BUILDTAGS ?= ,
 GO_LDFLAGS ?=
@@ -76,7 +76,7 @@ COMMON_ARGS += --build-arg=DEEPCOPY_VERSION="$(DEEPCOPY_VERSION)"
 COMMON_ARGS += --build-arg=GOLANGCILINT_VERSION="$(GOLANGCILINT_VERSION)"
 COMMON_ARGS += --build-arg=GOFUMPT_VERSION="$(GOFUMPT_VERSION)"
 COMMON_ARGS += --build-arg=TESTPKGS="$(TESTPKGS)"
-TOOLCHAIN ?= docker.io/golang:1.25-alpine
+TOOLCHAIN ?= docker.io/golang:1.26-alpine
 
 # help menu
 
@@ -170,6 +170,10 @@ local-%:  ## Builds the specified target defined in the Dockerfile using the loc
 	      rmdir "$$DEST/$$directory/"; \
 	    fi; \
 	  done'
+
+.PHONY: check-dirty
+check-dirty:
+	@if test -n "`git status --porcelain`"; then echo "Source tree is dirty"; git status; git diff; exit 1 ; fi
 
 generate:  ## Generate .proto definitions.
 	@$(MAKE) local-$@ DEST=./
