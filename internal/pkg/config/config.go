@@ -20,6 +20,7 @@ type Proxmox struct {
 
 	TokenID     string `yaml:"tokenID,omitempty"`
 	TokenSecret string `yaml:"tokenSecret,omitempty"`
+	Token       string `yaml:"token,omitempty"`
 
 	InsecureSkipVerify bool `yaml:"insecureSkipVerify,omitempty"`
 }
