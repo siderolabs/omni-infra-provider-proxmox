@@ -133,6 +133,10 @@
             "type": "string",
             "description": "Proxmox Resource Mapping name (e.g., nvidia-gpu-1)"
           },
+          "mdev": {
+            "type": "string",
+            "description": "Proxmox Mediated Device name (e.g., nvidia-180)"
+          },
           "pcie": {
             "type": "boolean",
             "description": "Use PCIe mode instead of PCI (recommended for GPUs)"

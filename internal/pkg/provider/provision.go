@@ -482,6 +482,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					pciParts = append(pciParts, "rombar=1")
 				}
 
+				if pci.MDev != "" {
+					pciParts = append(pciParts, fmt.Sprintf("mdev=%s", pci.MDev))
+				}
+
 				pciString := strings.Join(pciParts, ",")
 				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
 					Name:  fmt.Sprintf("hostpci%d", i), // hostpci0, hostpci1, etc.

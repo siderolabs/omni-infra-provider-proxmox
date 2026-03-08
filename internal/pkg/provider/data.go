@@ -43,6 +43,7 @@ type AdditionalDisk struct {
 // PCIDevice represents a PCI device passthrough configuration using Proxmox Resource Mappings.
 type PCIDevice struct {
 	Mapping    string `yaml:"mapping"`               // Resource mapping name (e.g., nvidia-gpu-1)
+	MDev       string `yaml:"mdev"`                  // Mediated device name (e.g., nvidia-180)
 	PCIExpress bool   `yaml:"pcie,omitempty"`        // Use PCIe instead of PCI (recommended for GPUs)
 	PrimaryGPU bool   `yaml:"primary_gpu,omitempty"` // Set as primary GPU (x-vga=1)
 	ROMBar     bool   `yaml:"rombar,omitempty"`      // Enable ROM BAR (default true, set false to disable)
