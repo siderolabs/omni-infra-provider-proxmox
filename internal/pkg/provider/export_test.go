@@ -60,3 +60,34 @@ func (s *scheduler) Release(requestID string) {
 func ShouldCountSetVMs(data Data, hasSet bool) bool {
 	return shouldCountSetVMs(data, hasSet)
 }
+
+func ParseVMIDRange(s string) (start, end int, err error) {
+	r, err := parseVMIDRange(s)
+
+	return r.start, r.end, err
+}
+
+func LowestFreeVMID(start, end int, used map[int]struct{}) (int, error) {
+	return lowestFreeVMID(vmidRange{start: start, end: end}, used)
+}
+
+func ResolveIP(data Data, vmid int) (string, error) {
+	ip, err := resolveIP(data, vmid)
+	if err != nil {
+		return "", err
+	}
+
+	return ip.String(), nil
+}
+
+func ValidateNetwork(data Data) error {
+	return validateNetwork(data)
+}
+
+func ParseMACFromNet(net string) (string, error) {
+	return parseMACFromNet(net)
+}
+
+func BuildNetworkConfig(data Data, vmid int, mac string) (string, error) {
+	return buildNetworkConfig(data, vmid, mac)
+}

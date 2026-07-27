@@ -42,8 +42,10 @@ type Provisioner struct {
 	proxmoxClient         *proxmox.Client
 	scheduler             *scheduler
 	pendingISODownloads   map[string]string
+	reservedVMIDs         map[int]struct{}
 	pendingISODownloadsMu sync.Mutex
 	poolMu                sync.Mutex
+	vmidMu                sync.Mutex
 }
 
 // NewProvisioner creates a new provisioner.
@@ -53,6 +55,7 @@ func NewProvisioner(proxmoxClient *proxmox.Client) *Provisioner {
 		scheduler:           newScheduler(),
 		ha:                  ha.NewManager(proxmoxClient),
 		pendingISODownloads: make(map[string]string),
+		reservedVMIDs:       make(map[int]struct{}),
 	}
 }
 
@@ -312,6 +315,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return err
 			}
 
+			if err = validateNetwork(data); err != nil {
+				return err
+			}
+
 			node, err := p.proxmoxClient.Node(ctx, pctx.State.TypedSpec().Value.Node)
 			if err != nil {
 				return err
@@ -322,9 +329,31 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return err
 			}
 
-			vmid, err := cluster.NextID(ctx)
+			var vmid int
+
+			if data.VMIDRange != "" {
+				vmid, err = p.allocateVMID(ctx, cluster, data.VMIDRange)
+			} else {
+				vmid, err = cluster.NextID(ctx)
+			}
+
 			if err != nil {
 				return err
+			}
+
+			// Release the reservation on any early return between here and a
+			// successful VM creation. A created VM keeps its reservation so the
+			// id stays reserved until it materializes in cluster.Resources and
+			// self-prunes. The NextID (empty-range) path never reserves, so the
+			// guard skips it.
+			committed := false
+
+			if data.VMIDRange != "" {
+				defer func() {
+					if !committed {
+						p.releaseVMID(vmid)
+					}
+				}()
 			}
 
 			isoStorage, err := node.StorageISO(ctx)
@@ -606,6 +635,8 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return err
 			}
 
+			committed = true
+
 			pctx.State.TypedSpec().Value.VmCreateTask = string(task.UPID)
 			pctx.State.TypedSpec().Value.Vmid = int32(vmid)
 
@@ -622,6 +653,31 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return err
 				}
 
+				var data Data
+
+				if err = pctx.UnmarshalProviderData(&data); err != nil {
+					return err
+				}
+
+				networkConfig := "version: 1"
+
+				if data.Network != nil {
+					netCfg, ok := vm.VirtualMachineConfig.Nets["net0"]
+					if !ok {
+						return fmt.Errorf("net0 config not found on VM %d", pctx.State.TypedSpec().Value.Vmid)
+					}
+
+					mac, macErr := parseMACFromNet(netCfg)
+					if macErr != nil {
+						return macErr
+					}
+
+					networkConfig, err = buildNetworkConfig(data, int(pctx.State.TypedSpec().Value.Vmid), mac)
+					if err != nil {
+						return err
+					}
+				}
+
 				err = vm.CloudInit(
 					ctx,
 					"ide0",
@@ -635,7 +691,7 @@ hostname: %s`,
 						pctx.GetRequestID(),
 					),
 					"",
-					"version: 1",
+					networkConfig,
 				)
 				if err != nil {
 					return fmt.Errorf("failed to inject nocloud config: %w", err)
@@ -663,6 +719,10 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 	// release up front: a request torn down before its VM materializes returns
 	// at the Vmid == 0 check below.
 	p.scheduler.release(machineRequest.Metadata().ID())
+
+	// release any VMID reservation held in-memory for this machine; no-op if it
+	// was never range-allocated or already self-pruned after materializing.
+	p.releaseVMID(int(machine.TypedSpec().Value.Vmid))
 
 	if machine.TypedSpec().Value.Vmid == 0 {
 		return nil
@@ -741,6 +801,58 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 	}
 
 	return nil
+}
+
+// allocateVMID picks the lowest free VMID within rangeSpec. It combines the
+// cluster's in-use VMIDs with an in-memory reserved-set so concurrent
+// provisions in the same set do not collide during the window between
+// allocation and the VM appearing in Proxmox. Reserved IDs self-prune once they
+// materialize in the cluster resource list.
+func (p *Provisioner) allocateVMID(ctx context.Context, cluster *proxmox.Cluster, rangeSpec string) (int, error) {
+	r, err := parseVMIDRange(rangeSpec)
+	if err != nil {
+		return 0, err
+	}
+
+	vmResources, err := cluster.Resources(ctx, "vm")
+	if err != nil {
+		return 0, fmt.Errorf("failed to list cluster resources: %w", err)
+	}
+
+	p.vmidMu.Lock()
+	defer p.vmidMu.Unlock()
+
+	used := make(map[int]struct{}, len(vmResources)+len(p.reservedVMIDs))
+	for _, res := range vmResources {
+		used[int(res.VMID)] = struct{}{}
+	}
+
+	for id := range p.reservedVMIDs {
+		if _, materialized := used[id]; materialized {
+			delete(p.reservedVMIDs, id)
+
+			continue
+		}
+
+		used[id] = struct{}{}
+	}
+
+	id, err := lowestFreeVMID(r, used)
+	if err != nil {
+		return 0, err
+	}
+
+	p.reservedVMIDs[id] = struct{}{}
+
+	return id, nil
+}
+
+// releaseVMID drops an id from the reserved-set (used when VM creation fails).
+func (p *Provisioner) releaseVMID(id int) {
+	p.vmidMu.Lock()
+	defer p.vmidMu.Unlock()
+
+	delete(p.reservedVMIDs, id)
 }
 
 // User tags come first so the tags string is stable across reconciles.
