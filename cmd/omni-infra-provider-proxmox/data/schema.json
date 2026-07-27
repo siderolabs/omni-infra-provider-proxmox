@@ -52,6 +52,45 @@
       "type": "boolean",
       "description": "Enable per-VM firewall (fwbr) on primary NIC. Defaults to true. Set false when L2-broadcast services need traffic to bypass fwbr."
     },
+    "vmid_range": {
+      "type": "string",
+      "pattern": "^[0-9]+-[0-9]+$",
+      "description": "Restrict VMID allocation to an inclusive \"start-end\" range (e.g. \"200-250\") instead of Proxmox NextID. Required when using network.base_ip for VMID-derived static IPs. Dedicate the range to this machine class."
+    },
+    "network": {
+      "type": "object",
+      "title": "Static Networking",
+      "description": "Static IPv4/IPv6 networking injected via cloud-init network-config. When omitted, the VM uses DHCP. Single-family per class (the address family is inferred from 'subnet'). Set exactly one of 'ip_address' (explicit) or 'base_ip' (VMID-derived, requires 'vmid_range').",
+      "properties": {
+        "subnet": {
+          "type": "string",
+          "description": "Subnet in CIDR notation, e.g. '192.168.26.0/24' or '2001:db8::/64'. Required; supplies the prefix length and the address family for the whole block."
+        },
+        "gateway": {
+          "type": "string",
+          "description": "Optional default gateway, e.g. '192.168.26.1'. Must be in the same family as 'subnet'."
+        },
+        "nameservers": {
+          "type": "array",
+          "description": "Optional DNS nameserver IP addresses.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "ip_address": {
+          "type": "string",
+          "description": "Explicit static IP for this VM, e.g. '192.168.26.31'. Use for single-machine classes (a shared class would assign every machine the same IP). Mutually exclusive with 'base_ip'."
+        },
+        "base_ip": {
+          "type": "string",
+          "description": "Base IP for VMID-derived addressing: each VM gets base_ip + (vmid - vmid_range.start), so a machine set gets unique deterministic IPs. Requires 'vmid_range'. Mutually exclusive with 'ip_address'."
+        }
+      },
+      "required": [
+        "subnet"
+      ]
+    },
     "disk_ssd": {
       "type": "boolean",
       "description": "Enable SSD emulation (ssd=1) for better performance on SSD/NVMe storage"

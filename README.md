@@ -125,6 +125,86 @@ config:
 
 Replace `"local-lvm"` with the name of the storage you want to use for VM disks in your Proxmox cluster.
 
+### Static Networking (no DHCP)
+
+By default VMs use DHCP. To assign static IPv4/IPv6 addressing, add a `network:` block
+to the machine class `providerdata`. When omitted, DHCP behavior is unchanged.
+
+Two addressing modes are supported.
+
+**Explicit** — a single fixed IP. Use this for single-machine classes (e.g. a
+specific control-plane node); if a class provisions more than one machine they
+would all receive the same IP.
+
+```yaml
+providerdata: |
+  storage_selector: name == "local-lvm"
+  network_bridge: vmbr1
+  vlan: 2501
+  network:
+    subnet: 192.168.26.0/24
+    gateway: 192.168.26.1
+    nameservers:
+      - 8.8.8.8
+      - 8.8.4.4
+    ip_address: 192.168.26.31
+```
+
+**VMID-derived** — a unique IP per machine in a set, derived from the VM's VMID:
+
+```text
+ip = base_ip + (vmid - vmid_range.start)
+```
+
+The provider allocates each VM's VMID from `vmid_range` (lowest free first), so
+each machine gets a distinct, deterministic address.
+
+```yaml
+providerdata: |
+  storage_selector: name == "local-lvm"
+  network_bridge: vmbr1
+  vlan: 2501
+  vmid_range: 5300-5350
+  network:
+    subnet: 192.168.26.0/24
+    gateway: 192.168.26.1
+    nameservers:
+      - 8.8.8.8
+    base_ip: 192.168.26.10   # vmid 5300 -> .10, vmid 5304 -> .14
+```
+
+**IPv6** works the same way — use IPv6 values and the provider emits the correct
+config automatically. A class is single-family (IPv4 **or** IPv6), not
+dual-stack:
+
+```yaml
+providerdata: |
+  storage_selector: name == "local-lvm"
+  network_bridge: vmbr1
+  vmid_range: 5300-5350
+  network:
+    subnet: 2001:db8::/64
+    gateway: 2001:db8::1
+    nameservers:
+      - 2001:4860:4860::8888
+    base_ip: 2001:db8::10   # vmid 5304 -> 2001:db8::14
+```
+
+Notes:
+
+- `subnet` is required (CIDR, IPv4 or IPv6) and supplies the prefix; the family
+  is inferred from it and all other addresses in the block must match. Set
+  exactly one of `ip_address` or `base_ip`. `base_ip` requires `vmid_range`.
+- Configuration is validated up front: `base_ip` plus the full range width must
+  fit inside `subnet`, and IPs may not be the subnet network address (or the
+  IPv4 broadcast address) — a bad config fails the whole machine class
+  immediately.
+- The derived IP is stable per **VMID**, not per logical node. Deprovision +
+  reprovision reuses the lowest free VMID (fills holes first), so addresses are
+  recycled rather than permanently reserved.
+- Dedicate the `vmid_range` to this class. If Proxmox already holds a guest with
+  a VMID inside the range, allocation skips it, which shifts the derived offsets.
+
 ### High Availability
 
 Adding an `ha:` block to the machine class registers each provisioned VM as a Proxmox HA resource
