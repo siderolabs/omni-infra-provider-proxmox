@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -624,10 +625,21 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return err
 				}
 
+				joinConfig := pctx.ConnectionParams.JoinConfig
+
+				if caPath := os.Getenv("TRUSTED_ROOTS_CONFIG_PATH"); caPath != "" {
+					caConfig, readErr := os.ReadFile(caPath)
+					if readErr != nil {
+						return fmt.Errorf("failed to read trusted roots config from %q: %w", caPath, readErr)
+					}
+
+					joinConfig = joinConfig + "\n---\n" + string(caConfig)
+				}
+
 				err = vm.CloudInit(
 					ctx,
 					"ide0",
-					pctx.ConnectionParams.JoinConfig,
+					joinConfig,
 					fmt.Sprintf(
 						`instance-id: %s
 local-hostname: %s

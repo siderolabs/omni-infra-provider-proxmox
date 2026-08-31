@@ -61,6 +61,47 @@ services:
     restart: unless-stopped
 ```
 
+#### Injecting a Trusted CA Certificate (self-hosted Omni)
+
+If your Omni instance uses a self-signed or internal CA, the Talos node must trust
+it before establishing the SideroLink connection.
+Set the `TRUSTED_ROOTS_CONFIG_PATH` environment variable to point to a file
+containing a Talos `TrustedRootsConfig` document.
+The provider will append it to the nocloud `user-data` as a separate YAML document
+so it is applied on first boot, before any connection to Omni.
+
+Example CA file (`trusted-roots.yaml`):
+
+```yaml
+apiVersion: v1alpha1
+kind: TrustedRootsConfig
+name: internal-ca
+certificates: |-
+    -----BEGIN CERTIFICATE-----
+    <base64-encoded DER>
+    -----END CERTIFICATE-----
+```
+
+Extended Docker Compose example with CA injection:
+
+```yaml
+services:
+  omni-infra-provider-proxmox:
+    image: ghcr.io/siderolabs/omni-infra-provider-proxmox
+    volumes:
+      - ./config.yaml:/config.yaml
+      - ./trusted-roots.yaml:/trusted-roots.yaml:ro
+    environment:
+      TRUSTED_ROOTS_CONFIG_PATH: /trusted-roots.yaml
+    command: >
+      --config-file /config.yaml
+      --omni-api-endpoint https://<account-name>.omni.siderolabs.io/
+      --omni-service-account-key <infrastructure-provider-key>
+    restart: unless-stopped
+```
+
+When `TRUSTED_ROOTS_CONFIG_PATH` is empty or unset the provider behaves exactly as before.
+
 Start the provider:
 
 ```bash
