@@ -27,21 +27,27 @@ type Data struct {
 	Pool            string `yaml:"pool,omitempty"`
 	// PlacementStrategy selects how a node is chosen for an auto-provisioned VM:
 	// spread (default), fewer-vms, round-robin or binpack.
-	PlacementStrategy string           `yaml:"placement_strategy,omitempty"`
-	AdditionalDisks   []AdditionalDisk `yaml:"additional_disks,omitempty"`
-	AdditionalNICs    []AdditionalNIC  `yaml:"additional_nics,omitempty"`
-	PCIDevices        []PCIDevice      `yaml:"pci_devices,omitempty"`
-	USBDevices        []USBDevice      `yaml:"usb_devices,omitempty"`
-	Tags              []string         `yaml:"tags,omitempty"`
-	Vlan              uint64           `yaml:"vlan"`
-	Memory            uint64           `yaml:"memory"`
-	Sockets           int              `yaml:"sockets"`
-	DiskSize          int              `yaml:"disk_size"`
-	Cores             int              `yaml:"cores"`
-	DiskIOThread      bool             `yaml:"disk_iothread,omitempty"`
-	NUMA              bool             `yaml:"numa,omitempty"`
-	DiskDiscard       bool             `yaml:"disk_discard,omitempty"`
-	DiskSSD           bool             `yaml:"disk_ssd,omitempty"`
+	PlacementStrategy string `yaml:"placement_strategy,omitempty"`
+	// IPAllocation selects how a VM gets its address: dhcp (default) or
+	// deterministic (a static address derived from the VM id within subnet).
+	IPAllocation    string           `yaml:"ip_allocation,omitempty"`
+	Subnet          string           `yaml:"subnet,omitempty"`
+	Gateway         string           `yaml:"gateway,omitempty"`
+	AdditionalDisks []AdditionalDisk `yaml:"additional_disks,omitempty"`
+	AdditionalNICs  []AdditionalNIC  `yaml:"additional_nics,omitempty"`
+	PCIDevices      []PCIDevice      `yaml:"pci_devices,omitempty"`
+	USBDevices      []USBDevice      `yaml:"usb_devices,omitempty"`
+	Tags            []string         `yaml:"tags,omitempty"`
+	DNSServers      []string         `yaml:"dns_servers,omitempty"`
+	Vlan            uint64           `yaml:"vlan"`
+	Memory          uint64           `yaml:"memory"`
+	Sockets         int              `yaml:"sockets"`
+	DiskSize        int              `yaml:"disk_size"`
+	Cores           int              `yaml:"cores"`
+	DiskIOThread    bool             `yaml:"disk_iothread,omitempty"`
+	NUMA            bool             `yaml:"numa,omitempty"`
+	DiskDiscard     bool             `yaml:"disk_discard,omitempty"`
+	DiskSSD         bool             `yaml:"disk_ssd,omitempty"`
 }
 
 // AdditionalDisk represents an additional disk configuration.
