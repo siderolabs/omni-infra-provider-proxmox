@@ -432,6 +432,23 @@ func TestAllocateIPNeverReturnsGateway(t *testing.T) {
 	require.NotEqual(t, gateway.String(), addr.String())
 }
 
+func TestAllocateIPRejectsGatewayOutsideSubnet(t *testing.T) {
+	subnet := netip.MustParsePrefix("10.0.16.0/20")
+
+	_, _, err := provider.AllocateIP("deterministic", subnet, netip.MustParseAddr("10.0.1.1"), 105)
+	require.Error(t, err, "gateway below the subnet must not underflow past the range check")
+}
+
+func TestAllocateIPRejectsGatewayAsNetworkOrBroadcast(t *testing.T) {
+	subnet := netip.MustParsePrefix("10.0.16.0/20")
+
+	_, _, err := provider.AllocateIP("deterministic", subnet, netip.MustParseAddr("10.0.16.0"), 105)
+	require.Error(t, err, "network address is not a usable gateway host")
+
+	_, _, err = provider.AllocateIP("deterministic", subnet, netip.MustParseAddr("10.0.31.255"), 105)
+	require.Error(t, err, "broadcast address is not a usable gateway host")
+}
+
 func TestAllocateIPCollidesOnceFleetExceedsSubnetCapacity(t *testing.T) {
 	// Documents the known ceiling: VMIDs a maxHosts apart map to the same
 	// host. /30 has maxHosts=2, so vmid 1 and vmid 3 collide.

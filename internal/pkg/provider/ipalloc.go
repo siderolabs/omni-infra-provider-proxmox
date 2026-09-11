@@ -63,7 +63,16 @@ func allocateIP(mode ipAllocation, subnet netip.Prefix, gateway netip.Addr, vmid
 		}
 
 		gb := gateway.As4()
-		gatewayHost = binary.BigEndian.Uint32(gb[:]) - network
+		gatewayAddr := binary.BigEndian.Uint32(gb[:])
+
+		// Subtracting first and range-checking after would underflow (wrap to a huge
+		// uint32) for a gateway below the subnet, silently defeating the host-offset
+		// check below instead of erroring. Range-check on the real addresses first.
+		if gatewayAddr < network+1 || gatewayAddr > network+maxHosts {
+			return netip.Addr{}, false, fmt.Errorf("gateway %q is not a usable host in subnet %q", gateway, subnet)
+		}
+
+		gatewayHost = gatewayAddr - network
 	}
 
 	host := uint32(vmid) % maxHosts
