@@ -5,15 +5,34 @@
 package provider_test
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/luthermonson/go-proxmox"
+	"github.com/siderolabs/omni/client/pkg/infra/provision"
+	"github.com/siderolabs/omni/client/pkg/omni/resources/infra"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/siderolabs/omni-infra-provider-proxmox/api/specs"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/ha"
+	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/resources"
 )
+
+func writeData(t *testing.T, w http.ResponseWriter, data any) {
+	t.Helper()
+
+	w.Header().Set("Content-Type", "application/json")
+	require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": data}))
+}
 
 const (
 	talosWorkers = "talos-workers"
@@ -439,4 +458,124 @@ func TestStartAttemptsExhaustedShortCircuitsRepeatedReconciles(t *testing.T) {
 	require.Contains(t, err.Error(), "giving up starting VM after")
 	require.Equal(t, attemptsBefore, spec.StartAttempts, "a repeated reconcile must not increment StartAttempts again")
 	require.Equal(t, "UPID:node:...:qmstart:", spec.VmStartTask, "the stale VmStartTask must not be touched by the short-circuit")
+}
+
+// TestStartVMStepEnforcesRetryCapAgainstRealProxmoxAPI drives the actual "startVM" provision
+// step (not the internal helpers directly) against a fake Proxmox HTTP server whose start task
+// always ends "stopped", repeating the step call the way the controller repeats a reconcile.
+// This is the higher-level check requested on PR #83: it exercises the real getVM/CloudInit/
+// vm.Start/checkTaskStatus HTTP round-trips together with StartAttempts persistence on the
+// Machine resource, instead of trusting that the unit-level helpers reflect what the step does.
+func TestStartVMStepEnforcesRetryCapAgainstRealProxmoxAPI(t *testing.T) {
+	const (
+		node = "pve1"
+		vmid = 100
+	)
+
+	var (
+		startCalls atomic.Int32
+		taskSeq    atomic.Int32
+	)
+
+	newUPID := func(kind string) string {
+		return fmt.Sprintf("UPID:%s:00000000:00000000:00000000:%s:%d:root@pam:", node, kind, taskSeq.Add(1))
+	}
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(fmt.Sprintf("/nodes/%s/status", node), func(w http.ResponseWriter, _ *http.Request) {
+		writeData(t, w, map[string]any{})
+	})
+	mux.HandleFunc(fmt.Sprintf("/nodes/%s/qemu/%d/status/current", node, vmid), func(w http.ResponseWriter, _ *http.Request) {
+		writeData(t, w, map[string]any{"vmid": vmid})
+	})
+	mux.HandleFunc(fmt.Sprintf("/nodes/%s/qemu/%d/config", node, vmid), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			writeData(t, w, map[string]any{})
+
+			return
+		}
+
+		writeData(t, w, newUPID("qmconfig")) // AddTag / device+boot patch, always succeeds
+	})
+	mux.HandleFunc(fmt.Sprintf("/nodes/%s/storage", node), func(w http.ResponseWriter, _ *http.Request) {
+		writeData(t, w, []map[string]any{{"storage": "local", "content": "iso", "enabled": 1}})
+	})
+	mux.HandleFunc(fmt.Sprintf("/nodes/%s/storage/local/upload", node), func(w http.ResponseWriter, _ *http.Request) {
+		writeData(t, w, newUPID("imgcopy")) // cloud-init ISO upload, always succeeds
+	})
+	mux.HandleFunc(fmt.Sprintf("/nodes/%s/qemu/%d/status/start", node, vmid), func(w http.ResponseWriter, _ *http.Request) {
+		startCalls.Add(1)
+		writeData(t, w, newUPID("qmstart"))
+	})
+	mux.HandleFunc(fmt.Sprintf("/nodes/%s/tasks/", node), func(w http.ResponseWriter, r *http.Request) {
+		// Real Proxmox echoes UPID/Node back on every status poll; the client's Task.Ping
+		// re-decodes the response onto the same struct it polled with, so a stub omitting
+		// them wipes the task's identity (Node included) after the first poll, sending the
+		// next poll to a malformed "/nodes//tasks/..." URL. Echo both back here too.
+		upid := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/nodes/%s/tasks/", node)), "/status")
+
+		if strings.Contains(upid, ":qmstart:") {
+			writeData(t, w, map[string]any{"UPID": upid, "Node": node, "Status": "stopped", "IsRunning": false, "IsSuccessful": false, "IsFailed": true})
+
+			return
+		}
+
+		writeData(t, w, map[string]any{"UPID": upid, "Node": node, "Status": "OK", "IsRunning": false, "IsSuccessful": true})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	p := provider.NewProvisioner(proxmox.NewClient(srv.URL))
+
+	var startVMStep provision.Step[*resources.Machine]
+
+	for _, step := range p.ProvisionSteps() {
+		if step.Name() == "startVM" {
+			startVMStep = step
+		}
+	}
+
+	require.NotZero(t, startVMStep.Name(), "startVM step must exist")
+
+	machineRequest := infra.NewMachineRequest("req-1")
+	machine := resources.NewMachine("default", "req-1")
+	machine.TypedSpec().Value.Node = node
+	machine.TypedSpec().Value.Vmid = vmid
+	machine.TypedSpec().Value.Uuid = "11111111-1111-1111-1111-111111111111"
+
+	pctx := provision.NewContext[*resources.Machine](
+		machineRequest,
+		infra.NewMachineRequestStatus("req-1"),
+		machine,
+		provision.ConnectionParams{JoinConfig: "join-config"},
+		nil,
+		nil,
+	)
+
+	// Every reconcile until the cap must reissue vm.Start() after seeing the prior task
+	// end "stopped"; the retry interval error from a fresh start is expected, not a failure.
+	var lastErr error
+
+	for i := 0; i < int(provider.MaxStartAttempts)+1; i++ {
+		lastErr = startVMStep.Run(context.Background(), zap.NewNop(), pctx)
+	}
+
+	require.Error(t, lastErr, "must give up once the cap is hit")
+	require.Contains(t, lastErr.Error(), "giving up starting VM after")
+	require.EqualValues(t, provider.MaxStartAttempts, startCalls.Load(),
+		"vm.Start() must be issued exactly MaxStartAttempts times, never once the cap is persisted")
+	require.EqualValues(t, provider.MaxStartAttempts, machine.TypedSpec().Value.StartAttempts,
+		"StartAttempts must be persisted on the resource, not just held in a local variable")
+
+	// A further reconcile after the terminal error must short-circuit: no additional
+	// vm.Start() call and no re-poll of the dead task incrementing StartAttempts again.
+	callsBefore := startCalls.Load()
+	err := startVMStep.Run(context.Background(), zap.NewNop(), pctx)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "giving up starting VM after")
+	require.Equal(t, callsBefore, startCalls.Load())
+	require.EqualValues(t, provider.MaxStartAttempts, machine.TypedSpec().Value.StartAttempts)
 }
