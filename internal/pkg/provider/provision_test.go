@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/siderolabs/omni-infra-provider-proxmox/api/specs"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/ha"
 )
@@ -390,4 +391,32 @@ func TestBuildUSBDeviceOptions(t *testing.T) {
 		"usb0": "mapping=rtl-sdr,usb3=1",
 		"usb1": "mapping=zigbee-controller",
 	}, provider.BuildUSBDeviceOptions(devices))
+}
+
+func TestHandleStoppedStartTaskRetriesUnderMaxAttempts(t *testing.T) {
+	spec := &specs.MachineSpec{
+		VmStartTask:   "UPID:node:...:qmstart:",
+		StartAttempts: provider.MaxStartAttempts - 2,
+	}
+
+	restart, err := provider.HandleStoppedStartTask(spec, "req-1")
+
+	require.NoError(t, err)
+	require.True(t, restart)
+	require.Empty(t, spec.VmStartTask, "VmStartTask must be cleared so vm.Start() is reissued")
+	require.EqualValues(t, provider.MaxStartAttempts-1, spec.StartAttempts)
+}
+
+func TestHandleStoppedStartTaskGivesUpAtMaxAttempts(t *testing.T) {
+	spec := &specs.MachineSpec{
+		VmStartTask:   "UPID:node:...:qmstart:",
+		StartAttempts: provider.MaxStartAttempts - 1,
+	}
+
+	restart, err := provider.HandleStoppedStartTask(spec, "req-1")
+
+	require.Error(t, err)
+	require.False(t, restart)
+	require.Contains(t, err.Error(), "giving up starting VM after")
+	require.Equal(t, "UPID:node:...:qmstart:", spec.VmStartTask, "VmStartTask must not be cleared once giving up, no vm.Start() reissue")
 }

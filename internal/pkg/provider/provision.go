@@ -27,6 +27,7 @@ import (
 	siderocel "github.com/siderolabs/talos/pkg/machinery/cel"
 	"go.uber.org/zap"
 
+	"github.com/siderolabs/omni-infra-provider-proxmox/api/specs"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/ha"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/resources"
 )
@@ -34,6 +35,7 @@ import (
 const (
 	machineRequestTagPrefix = "machine-request."
 	poolComment             = "managed by omni-infra-provider-proxmox"
+	maxStartAttempts        = 5 // stop retrying vm.Start() after this many "stopped" tasks
 )
 
 // Provisioner implements Talos emulator infra provider.
@@ -613,47 +615,54 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			return provision.NewRetryInterval(time.Second * 10)
 		}),
-		provision.NewStep("startVM", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+		provision.NewStep("startVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VmStartTask != "" {
-				if err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VmStartTask); err != nil {
-					return err
-				}
-			} else {
-				vm, err := p.getVM(ctx, pctx.State.TypedSpec().Value.Node, pctx.State.TypedSpec().Value.Vmid)
-				if err != nil {
-					return err
+				err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VmStartTask)
+				if err == nil {
+					return nil
 				}
 
-				err = vm.CloudInit(
-					ctx,
-					"ide0",
-					pctx.ConnectionParams.JoinConfig,
-					fmt.Sprintf(
-						`instance-id: %s
-local-hostname: %s
-hostname: %s`,
-						pctx.State.TypedSpec().Value.Uuid,
-						pctx.GetRequestID(),
-						pctx.GetRequestID(),
-					),
-					"",
-					"version: 1",
-				)
-				if err != nil {
-					return fmt.Errorf("failed to inject nocloud config: %w", err)
-				}
-
-				task, err := vm.Start(ctx)
-				if err != nil {
+				if err.Error() != "stopped" {
 					return err
 				}
 
-				pctx.State.TypedSpec().Value.VmStartTask = string(task.UPID)
-
-				return provision.NewRetryInterval(time.Second * 1)
+				if _, giveUpErr := handleStoppedStartTask(pctx.State.TypedSpec().Value, pctx.GetRequestID(), logger); giveUpErr != nil {
+					return giveUpErr
+				}
 			}
 
-			return nil
+			vm, err := p.getVM(ctx, pctx.State.TypedSpec().Value.Node, pctx.State.TypedSpec().Value.Vmid)
+			if err != nil {
+				return err
+			}
+
+			err = vm.CloudInit(
+				ctx,
+				"ide0",
+				pctx.ConnectionParams.JoinConfig,
+				fmt.Sprintf(
+					`instance-id: %s
+local-hostname: %s
+hostname: %s`,
+					pctx.State.TypedSpec().Value.Uuid,
+					pctx.GetRequestID(),
+					pctx.GetRequestID(),
+				),
+				"",
+				"version: 1",
+			)
+			if err != nil {
+				return fmt.Errorf("failed to inject nocloud config: %w", err)
+			}
+
+			task, err := vm.Start(ctx)
+			if err != nil {
+				return err
+			}
+
+			pctx.State.TypedSpec().Value.VmStartTask = string(task.UPID)
+
+			return provision.NewRetryInterval(time.Second * 1)
 		}),
 		provision.NewStep("registerHA", p.ha.RegisterStep),
 		provision.NewStep("syncHARules", p.ha.SyncRulesStep),
@@ -970,6 +979,26 @@ func (p *Provisioner) checkTaskStatus(ctx context.Context, id string) error {
 	}
 
 	return errors.New(t.Status)
+}
+
+// handleStoppedStartTask clears VmStartTask so startVM reissues vm.Start(), or gives up
+// after maxStartAttempts.
+func handleStoppedStartTask(spec *specs.MachineSpec, requestID string, logger *zap.Logger) (restart bool, err error) {
+	spec.StartAttempts++
+
+	if spec.StartAttempts >= maxStartAttempts {
+		logger.Error("giving up starting VM after too many attempts",
+			zap.String("requestID", requestID),
+			zap.Int32("attempts", spec.StartAttempts))
+
+		return false, fmt.Errorf("giving up starting VM after %d attempts: task ended in stopped state", spec.StartAttempts)
+	}
+
+	spec.VmStartTask = ""
+
+	logger.Info("VM start task stopped, retrying", zap.String("requestID", requestID), zap.Int32("attempts", spec.StartAttempts))
+
+	return true, nil
 }
 
 func (p *Provisioner) waitForTaskToFinish(ctx context.Context, t *proxmox.Task) error {

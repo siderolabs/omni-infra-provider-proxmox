@@ -4,7 +4,13 @@
 
 package provider
 
-import "time"
+import (
+	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/siderolabs/omni-infra-provider-proxmox/api/specs"
+)
 
 type NodeStatus = nodeStatus
 
@@ -70,4 +76,10 @@ func (s *scheduler) Release(requestID string) {
 
 func ShouldCountSetVMs(data Data, hasSet bool) bool {
 	return shouldCountSetVMs(data, hasSet)
+}
+
+const MaxStartAttempts = maxStartAttempts
+
+func HandleStoppedStartTask(spec *specs.MachineSpec, requestID string) (bool, error) {
+	return handleStoppedStartTask(spec, requestID, zap.NewNop())
 }
