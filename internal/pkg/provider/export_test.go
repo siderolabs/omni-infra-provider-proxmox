@@ -83,3 +83,7 @@ const MaxStartAttempts = maxStartAttempts
 func HandleStoppedStartTask(spec *specs.MachineSpec, requestID string) (bool, error) {
 	return handleStoppedStartTask(spec, requestID, zap.NewNop())
 }
+
+func StartAttemptsExhausted(spec *specs.MachineSpec) error {
+	return startAttemptsExhausted(spec)
+}

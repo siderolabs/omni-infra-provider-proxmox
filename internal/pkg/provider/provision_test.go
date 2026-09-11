@@ -420,3 +420,23 @@ func TestHandleStoppedStartTaskGivesUpAtMaxAttempts(t *testing.T) {
 	require.Contains(t, err.Error(), "giving up starting VM after")
 	require.Equal(t, "UPID:node:...:qmstart:", spec.VmStartTask, "VmStartTask must not be cleared once giving up, no vm.Start() reissue")
 }
+
+func TestStartAttemptsExhaustedShortCircuitsRepeatedReconciles(t *testing.T) {
+	spec := &specs.MachineSpec{
+		VmStartTask:   "UPID:node:...:qmstart:",
+		StartAttempts: provider.MaxStartAttempts - 1,
+	}
+
+	_, err := provider.HandleStoppedStartTask(spec, "req-1")
+	require.Error(t, err, "first give-up must error")
+
+	// A repeated reconcile (e.g. the resource gets requeued after the terminal error) must not
+	// re-ping the now-stale VmStartTask or bump StartAttempts again - it must short-circuit.
+	attemptsBefore := spec.StartAttempts
+	err = provider.StartAttemptsExhausted(spec)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "giving up starting VM after")
+	require.Equal(t, attemptsBefore, spec.StartAttempts, "a repeated reconcile must not increment StartAttempts again")
+	require.Equal(t, "UPID:node:...:qmstart:", spec.VmStartTask, "the stale VmStartTask must not be touched by the short-circuit")
+}

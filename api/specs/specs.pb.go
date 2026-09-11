@@ -2,18 +2,19 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.36.0
-// source: specs.proto
+// source: specs/specs.proto
 
 package specs
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	_ "google.golang.org/protobuf/types/known/durationpb"
 	_ "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -44,7 +45,7 @@ type MachineSpec struct {
 
 func (x *MachineSpec) Reset() {
 	*x = MachineSpec{}
-	mi := &file_specs_proto_msgTypes[0]
+	mi := &file_specs_specs_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -56,7 +57,7 @@ func (x *MachineSpec) String() string {
 func (*MachineSpec) ProtoMessage() {}
 
 func (x *MachineSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_specs_proto_msgTypes[0]
+	mi := &file_specs_specs_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -69,7 +70,7 @@ func (x *MachineSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MachineSpec.ProtoReflect.Descriptor instead.
 func (*MachineSpec) Descriptor() ([]byte, []int) {
-	return file_specs_proto_rawDescGZIP(), []int{0}
+	return file_specs_specs_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *MachineSpec) GetUuid() string {
@@ -156,11 +157,11 @@ func (x *MachineSpec) GetStartAttempts() int32 {
 	return 0
 }
 
-var File_specs_proto protoreflect.FileDescriptor
+var File_specs_specs_proto protoreflect.FileDescriptor
 
-const file_specs_proto_rawDesc = "" +
+const file_specs_specs_proto_rawDesc = "" +
 	"\n" +
-	"\vspecs.proto\x12\bemuspecs\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\x81\x03\n" +
+	"\x11specs/specs.proto\x12\bemuspecs\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\x81\x03\n" +
 	"\vMachineSpec\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x1c\n" +
 	"\tschematic\x18\x02 \x01(\tR\tschematic\x12#\n" +
@@ -176,22 +177,22 @@ const file_specs_proto_rawDesc = "" +
 	"\x0estart_attempts\x18\x0e \x01(\x05R\rstartAttemptsB=Z;github.com/siderolabs/omni-infra-provider-proxmox/api/specsb\x06proto3"
 
 var (
-	file_specs_proto_rawDescOnce sync.Once
-	file_specs_proto_rawDescData []byte
+	file_specs_specs_proto_rawDescOnce sync.Once
+	file_specs_specs_proto_rawDescData []byte
 )
 
-func file_specs_proto_rawDescGZIP() []byte {
-	file_specs_proto_rawDescOnce.Do(func() {
-		file_specs_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_specs_proto_rawDesc), len(file_specs_proto_rawDesc)))
+func file_specs_specs_proto_rawDescGZIP() []byte {
+	file_specs_specs_proto_rawDescOnce.Do(func() {
+		file_specs_specs_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_specs_specs_proto_rawDesc), len(file_specs_specs_proto_rawDesc)))
 	})
-	return file_specs_proto_rawDescData
+	return file_specs_specs_proto_rawDescData
 }
 
-var file_specs_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_specs_proto_goTypes = []any{
+var file_specs_specs_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_specs_specs_proto_goTypes = []any{
 	(*MachineSpec)(nil), // 0: emuspecs.MachineSpec
 }
-var file_specs_proto_depIdxs = []int32{
+var file_specs_specs_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -199,26 +200,26 @@ var file_specs_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_specs_proto_init() }
-func file_specs_proto_init() {
-	if File_specs_proto != nil {
+func init() { file_specs_specs_proto_init() }
+func file_specs_specs_proto_init() {
+	if File_specs_specs_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_specs_proto_rawDesc), len(file_specs_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_specs_specs_proto_rawDesc), len(file_specs_specs_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_specs_proto_goTypes,
-		DependencyIndexes: file_specs_proto_depIdxs,
-		MessageInfos:      file_specs_proto_msgTypes,
+		GoTypes:           file_specs_specs_proto_goTypes,
+		DependencyIndexes: file_specs_specs_proto_depIdxs,
+		MessageInfos:      file_specs_specs_proto_msgTypes,
 	}.Build()
-	File_specs_proto = out.File
-	file_specs_proto_goTypes = nil
-	file_specs_proto_depIdxs = nil
+	File_specs_specs_proto = out.File
+	file_specs_specs_proto_goTypes = nil
+	file_specs_specs_proto_depIdxs = nil
 }

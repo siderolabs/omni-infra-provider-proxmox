@@ -616,6 +616,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			return provision.NewRetryInterval(time.Second * 10)
 		}),
 		provision.NewStep("startVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			if err := startAttemptsExhausted(pctx.State.TypedSpec().Value); err != nil {
+				return err
+			}
+
 			if pctx.State.TypedSpec().Value.VmStartTask != "" {
 				err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VmStartTask)
 				if err == nil {
@@ -979,6 +983,18 @@ func (p *Provisioner) checkTaskStatus(ctx context.Context, id string) error {
 	}
 
 	return errors.New(t.Status)
+}
+
+// startAttemptsExhausted reports whether a prior handleStoppedStartTask call already gave up.
+// It leaves VmStartTask pointing at the terminal stopped task instead of clearing it, so without
+// this check every later reconcile of the startVM step would re-ping that same dead task and
+// increment StartAttempts again instead of staying at its terminal error.
+func startAttemptsExhausted(spec *specs.MachineSpec) error {
+	if spec.StartAttempts >= maxStartAttempts {
+		return fmt.Errorf("giving up starting VM after %d attempts: task ended in stopped state", spec.StartAttempts)
+	}
+
+	return nil
 }
 
 // handleStoppedStartTask clears VmStartTask so startVM reissues vm.Start(), or gives up
