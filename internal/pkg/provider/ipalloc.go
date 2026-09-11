@@ -92,8 +92,6 @@ func allocateIP(mode ipAllocation, subnet netip.Prefix, gateway netip.Addr, vmid
 	return netip.AddrFrom4(b), true, nil
 }
 
-// buildNetworkConfig renders a cloud-init v1 network-config for a static address,
-// consumed by Talos nocloud so the node has its address before it reaches Omni.
 // buildNetworkConfig renders cloud-init network-config v1 YAML. dns entries are parsed and
 // re-serialized as addresses (not pasted in as-is) so a malformed value - including one
 // containing a newline - can't produce invalid or structurally altered YAML.

@@ -624,8 +624,8 @@ hostname: %s`,
 						pctx.GetRequestID(),
 						pctx.GetRequestID(),
 					),
+					"",
 					networkConfig,
-					"version: 1",
 				)
 				if err != nil {
 					return fmt.Errorf("failed to inject nocloud config: %w", err)
