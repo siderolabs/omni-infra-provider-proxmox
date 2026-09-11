@@ -19,4 +19,5 @@ message MachineSpec {
   int32 vmid = 11;
   string pool = 12;
   bool ha_registered = 13;
+  int32 start_attempts = 14;
 }
