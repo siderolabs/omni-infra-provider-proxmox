@@ -30,9 +30,15 @@ func parseIPAllocation(s string) (ipAllocation, error) {
 }
 
 // allocateIP returns the address a VM should use under the given mode, or
-// ok=false for dhcp. deterministic derives a stable host from the VM id, which
-// is unique per VM so addresses never collide.
-func allocateIP(mode ipAllocation, subnet netip.Prefix, vmid int) (netip.Addr, bool, error) {
+// ok=false for dhcp. deterministic derives a stable host from the VM id modulo
+// the subnet's host count, excluding the gateway's own address.
+//
+// This is collision-free only while the fleet stays within the subnet's host
+// capacity: VMIDs that differ by a multiple of that capacity map to the same
+// host. A full fix needs a used-address set the provider can't cheaply read
+// back yet (see the placement-strategy TODO for incremental allocation).
+// Size the subnet well above the expected VM count for this mode to be safe.
+func allocateIP(mode ipAllocation, subnet netip.Prefix, gateway netip.Addr, vmid int) (netip.Addr, bool, error) {
 	if mode == ipDHCP {
 		return netip.Addr{}, false, nil
 	}
@@ -49,9 +55,25 @@ func allocateIP(mode ipAllocation, subnet netip.Prefix, vmid int) (netip.Addr, b
 	network := binary.BigEndian.Uint32(base[:])
 	maxHosts := (uint32(1) << (32 - subnet.Bits())) - 2
 
+	var gatewayHost uint32
+
+	if gateway.IsValid() {
+		if !gateway.Is4() {
+			return netip.Addr{}, false, fmt.Errorf("gateway %q must be IPv4", gateway)
+		}
+
+		gb := gateway.As4()
+		gatewayHost = binary.BigEndian.Uint32(gb[:]) - network
+	}
+
 	host := uint32(vmid) % maxHosts
 	if host == 0 {
 		host = maxHosts
+	}
+
+	// Never hand out the gateway's own address.
+	if gateway.IsValid() && host == gatewayHost {
+		host = host%maxHosts + 1
 	}
 
 	var b [4]byte

@@ -81,13 +81,13 @@ func ParseIPAllocation(s string) (string, error) {
 	return string(alloc), err
 }
 
-func AllocateIP(mode string, subnet netip.Prefix, vmid int) (netip.Addr, bool, error) {
+func AllocateIP(mode string, subnet netip.Prefix, gateway netip.Addr, vmid int) (netip.Addr, bool, error) {
 	alloc, err := parseIPAllocation(mode)
 	if err != nil {
 		return netip.Addr{}, false, err
 	}
 
-	return allocateIP(alloc, subnet, vmid)
+	return allocateIP(alloc, subnet, gateway, vmid)
 }
 
 func BuildNetworkConfig(addr, gateway string, dns []string) string {

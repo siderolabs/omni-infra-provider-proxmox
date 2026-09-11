@@ -404,18 +404,46 @@ func TestParseIPAllocation(t *testing.T) {
 }
 
 func TestAllocateIPDHCPReturnsNoAddress(t *testing.T) {
-	_, ok, err := provider.AllocateIP("dhcp", netip.MustParsePrefix("10.0.16.0/20"), 105)
+	_, ok, err := provider.AllocateIP("dhcp", netip.MustParsePrefix("10.0.16.0/20"), netip.Addr{}, 105)
 
 	require.NoError(t, err)
 	require.False(t, ok)
 }
 
 func TestAllocateIPDeterministicFromVMID(t *testing.T) {
-	addr, ok, err := provider.AllocateIP("deterministic", netip.MustParsePrefix("10.0.16.0/20"), 105)
+	addr, ok, err := provider.AllocateIP(
+		"deterministic", netip.MustParsePrefix("10.0.16.0/20"), netip.MustParseAddr("10.0.16.1"), 105,
+	)
 
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, "10.0.16.105", addr.String())
+}
+
+func TestAllocateIPNeverReturnsGateway(t *testing.T) {
+	subnet := netip.MustParsePrefix("10.0.16.0/20")
+	gateway := netip.MustParseAddr("10.0.16.1")
+
+	// vmid 1 maps to host offset 1, which is the gateway's own address.
+	addr, ok, err := provider.AllocateIP("deterministic", subnet, gateway, 1)
+
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NotEqual(t, gateway.String(), addr.String())
+}
+
+func TestAllocateIPCollidesOnceFleetExceedsSubnetCapacity(t *testing.T) {
+	// Documents the known ceiling: VMIDs a maxHosts apart map to the same
+	// host. /30 has maxHosts=2, so vmid 1 and vmid 3 collide.
+	subnet := netip.MustParsePrefix("10.0.16.0/30")
+
+	a, _, err := provider.AllocateIP("deterministic", subnet, netip.Addr{}, 1)
+	require.NoError(t, err)
+
+	b, _, err := provider.AllocateIP("deterministic", subnet, netip.Addr{}, 3)
+	require.NoError(t, err)
+
+	require.Equal(t, a.String(), b.String())
 }
 
 func TestBuildNetworkConfig(t *testing.T) {

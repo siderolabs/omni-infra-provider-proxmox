@@ -675,7 +675,12 @@ func networkConfigFor(pctx provision.Context[*resources.Machine]) (string, error
 		return "", fmt.Errorf("invalid subnet %q: %w", data.Subnet, err)
 	}
 
-	addr, ok, err := allocateIP(mode, subnet, int(pctx.State.TypedSpec().Value.Vmid))
+	gateway, err := netip.ParseAddr(data.Gateway)
+	if err != nil {
+		return "", fmt.Errorf("invalid gateway %q: %w", data.Gateway, err)
+	}
+
+	addr, ok, err := allocateIP(mode, subnet, gateway, int(pctx.State.TypedSpec().Value.Vmid))
 	if err != nil {
 		return "", err
 	}
