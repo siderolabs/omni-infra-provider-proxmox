@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -606,6 +607,11 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return err
 				}
 
+				networkConfig, err := networkConfigFor(pctx)
+				if err != nil {
+					return err
+				}
+
 				err = vm.CloudInit(
 					ctx,
 					"ide0",
@@ -618,7 +624,7 @@ hostname: %s`,
 						pctx.GetRequestID(),
 						pctx.GetRequestID(),
 					),
-					"",
+					networkConfig,
 					"version: 1",
 				)
 				if err != nil {
@@ -640,6 +646,45 @@ hostname: %s`,
 		provision.NewStep("registerHA", p.ha.RegisterStep),
 		provision.NewStep("syncHARules", p.ha.SyncRulesStep),
 	}
+}
+
+// networkConfigFor renders the cloud-init network-config for a machine, or an
+// empty string when the machine uses DHCP.
+func networkConfigFor(pctx provision.Context[*resources.Machine]) (string, error) {
+	var data Data
+
+	if err := pctx.UnmarshalProviderData(&data); err != nil {
+		return "", err
+	}
+
+	mode, err := parseIPAllocation(data.IPAllocation)
+	if err != nil {
+		return "", err
+	}
+
+	if mode == ipDHCP {
+		return "", nil
+	}
+
+	if data.Subnet == "" || data.Gateway == "" {
+		return "", fmt.Errorf("ip allocation %q requires subnet and gateway", mode)
+	}
+
+	subnet, err := netip.ParsePrefix(data.Subnet)
+	if err != nil {
+		return "", fmt.Errorf("invalid subnet %q: %w", data.Subnet, err)
+	}
+
+	addr, ok, err := allocateIP(mode, subnet, int(pctx.State.TypedSpec().Value.Vmid))
+	if err != nil {
+		return "", err
+	}
+
+	if !ok {
+		return "", nil
+	}
+
+	return buildNetworkConfig(fmt.Sprintf("%s/%d", addr, subnet.Bits()), data.Gateway, data.DNSServers), nil
 }
 
 // Deprovision implements infra.Provisioner.

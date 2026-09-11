@@ -5,6 +5,7 @@
 package provider_test
 
 import (
+	"net/netip"
 	"testing"
 	"time"
 
@@ -390,4 +391,38 @@ func TestBuildUSBDeviceOptions(t *testing.T) {
 		"usb0": "mapping=rtl-sdr,usb3=1",
 		"usb1": "mapping=zigbee-controller",
 	}, provider.BuildUSBDeviceOptions(devices))
+}
+
+func TestParseIPAllocation(t *testing.T) {
+	for _, valid := range []string{"", "dhcp", "deterministic"} {
+		_, err := provider.ParseIPAllocation(valid)
+		require.NoError(t, err)
+	}
+
+	_, err := provider.ParseIPAllocation("bogus")
+	require.Error(t, err)
+}
+
+func TestAllocateIPDHCPReturnsNoAddress(t *testing.T) {
+	_, ok, err := provider.AllocateIP("dhcp", netip.MustParsePrefix("10.0.16.0/20"), 105)
+
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
+func TestAllocateIPDeterministicFromVMID(t *testing.T) {
+	addr, ok, err := provider.AllocateIP("deterministic", netip.MustParsePrefix("10.0.16.0/20"), 105)
+
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "10.0.16.105", addr.String())
+}
+
+func TestBuildNetworkConfig(t *testing.T) {
+	cfg := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{"10.0.19.1", "10.0.19.2"})
+
+	require.Contains(t, cfg, "address: 10.0.16.105/20")
+	require.Contains(t, cfg, "gateway: 10.0.16.1")
+	require.Contains(t, cfg, "- 10.0.19.1")
+	require.Contains(t, cfg, "- 10.0.19.2")
 }

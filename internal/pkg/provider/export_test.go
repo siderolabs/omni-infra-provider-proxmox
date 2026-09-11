@@ -4,7 +4,10 @@
 
 package provider
 
-import "time"
+import (
+	"net/netip"
+	"time"
+)
 
 type NodeStatus = nodeStatus
 
@@ -70,4 +73,23 @@ func (s *scheduler) Release(requestID string) {
 
 func ShouldCountSetVMs(data Data, hasSet bool) bool {
 	return shouldCountSetVMs(data, hasSet)
+}
+
+func ParseIPAllocation(s string) (string, error) {
+	alloc, err := parseIPAllocation(s)
+
+	return string(alloc), err
+}
+
+func AllocateIP(mode string, subnet netip.Prefix, vmid int) (netip.Addr, bool, error) {
+	alloc, err := parseIPAllocation(mode)
+	if err != nil {
+		return netip.Addr{}, false, err
+	}
+
+	return allocateIP(alloc, subnet, vmid)
+}
+
+func BuildNetworkConfig(addr, gateway string, dns []string) string {
+	return buildNetworkConfig(addr, gateway, dns)
 }
