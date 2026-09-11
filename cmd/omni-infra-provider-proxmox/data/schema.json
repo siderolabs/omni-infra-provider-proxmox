@@ -29,6 +29,32 @@
       ],
       "description": "Node selection strategy for auto-provisioned VMs, ignored when 'node' is set. 'spread' (default) balances by free memory, 'fewer-vms' prefers nodes running the fewest VMs, 'round-robin' cycles nodes within a machine request set, 'binpack' packs onto the most-loaded node that still fits."
     },
+    "ip_allocation": {
+      "type": "string",
+      "enum": [
+        "dhcp",
+        "deterministic"
+      ],
+      "description": "How the VM gets its address. 'dhcp' (default) relies on the network's DHCP server. 'deterministic' derives a static address from the VM id within 'subnet', excluding 'gateway'; requires 'subnet' and 'gateway' to be set."
+    },
+    "subnet": {
+      "type": "string",
+      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+      "description": "IPv4 subnet in CIDR form (e.g. 10.0.16.0/20) that deterministic ip_allocation derives addresses from."
+    },
+    "gateway": {
+      "type": "string",
+      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$",
+      "description": "IPv4 gateway address within 'subnet', excluded from deterministic allocation."
+    },
+    "dns_servers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$"
+      },
+      "description": "IPv4 nameserver addresses written into the VM's cloud-init network config."
+    },
     "memory": {
       "type": "integer",
       "minimum": 2048,

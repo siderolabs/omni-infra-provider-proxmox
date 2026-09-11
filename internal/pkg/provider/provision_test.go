@@ -447,10 +447,22 @@ func TestAllocateIPCollidesOnceFleetExceedsSubnetCapacity(t *testing.T) {
 }
 
 func TestBuildNetworkConfig(t *testing.T) {
-	cfg := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{"10.0.19.1", "10.0.19.2"})
+	cfg, err := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{"10.0.19.1", "10.0.19.2"})
 
+	require.NoError(t, err)
 	require.Contains(t, cfg, "address: 10.0.16.105/20")
 	require.Contains(t, cfg, "gateway: 10.0.16.1")
 	require.Contains(t, cfg, "- 10.0.19.1")
 	require.Contains(t, cfg, "- 10.0.19.2")
+}
+
+func TestBuildNetworkConfigRejectsMalformedDNS(t *testing.T) {
+	_, err := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{"10.0.19.1\n  - type: something-else"})
+	require.Error(t, err, "a malformed DNS entry (e.g. one smuggling YAML) must not reach rendered output")
+}
+
+func TestBuildNetworkConfigCanonicalizesDNS(t *testing.T) {
+	cfg, err := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{" 10.0.19.1 "})
+	require.NoError(t, err)
+	require.Contains(t, cfg, "- 10.0.19.1\n")
 }

@@ -90,6 +90,6 @@ func AllocateIP(mode string, subnet netip.Prefix, gateway netip.Addr, vmid int) 
 	return allocateIP(alloc, subnet, gateway, vmid)
 }
 
-func BuildNetworkConfig(addr, gateway string, dns []string) string {
+func BuildNetworkConfig(addr, gateway string, dns []string) (string, error) {
 	return buildNetworkConfig(addr, gateway, dns)
 }

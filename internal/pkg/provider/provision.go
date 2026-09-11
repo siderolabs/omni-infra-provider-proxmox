@@ -689,7 +689,7 @@ func networkConfigFor(pctx provision.Context[*resources.Machine]) (string, error
 		return "", nil
 	}
 
-	return buildNetworkConfig(fmt.Sprintf("%s/%d", addr, subnet.Bits()), data.Gateway, data.DNSServers), nil
+	return buildNetworkConfig(fmt.Sprintf("%s/%d", addr, subnet.Bits()), data.Gateway, data.DNSServers)
 }
 
 // Deprovision implements infra.Provisioner.
