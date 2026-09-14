@@ -170,6 +170,18 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			return nil
 		}),
+		provision.NewStep("labelHostNode", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			node := pctx.State.TypedSpec().Value.Node
+			if node == "" {
+				return nil
+			}
+
+			// Stamps which physical Proxmox host the VM landed on, so cluster-side
+			// scheduling (pod anti-affinity, node selectors) can key off it.
+			patch := fmt.Sprintf("machine:\n  nodeLabels:\n    proxmox.sidero.dev/node: %q\n", node)
+
+			return pctx.CreateConfigPatch(ctx, "proxmox-host-label", []byte(patch))
+		}),
 		provision.NewStep("createSchematic", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			// generating schematic with join configs as it's going to be used in the ISO image which doesn't support partial configs
 			schematic, err := pctx.GenerateSchematicID(
