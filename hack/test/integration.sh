@@ -9,6 +9,21 @@ mkdir -p "${TMP}"
 
 TALOS_VERSION=1.13.2
 OMNI_VERSION=${OMNI_VERSION:-latest}
+IMAGE_FACTORY_ENTERPRISE_ENV=${IMAGE_FACTORY_ENTERPRISE_ENV:-staging} # staging or prod, selects the enterprise factory and its token
+
+case "${IMAGE_FACTORY_ENTERPRISE_ENV}" in
+  staging) IMAGE_FACTORY_URL=https://factory-enterprise.staging.talos.dev ;;
+  prod) IMAGE_FACTORY_URL=https://factory.siderolabs.com ;;
+  *)
+    echo "unknown image factory enterprise environment: ${IMAGE_FACTORY_ENTERPRISE_ENV}" >&2
+    exit 1
+    ;;
+esac
+
+IMAGE_FACTORY_TOKEN_VAR="IMAGE_FACTORY_ENTERPRISE_${IMAGE_FACTORY_ENTERPRISE_ENV^^}_TOKEN"
+set +x # keep the token out of the trace
+IMAGE_FACTORY_TOKEN="${!IMAGE_FACTORY_TOKEN_VAR:?${IMAGE_FACTORY_TOKEN_VAR} must be set}"
+set -x
 OMNI_IMAGE="ghcr.io/siderolabs/omni:${OMNI_VERSION}"
 OMNI_INTEGRATION_TEST_IMAGE="ghcr.io/siderolabs/omni-integration-test:${OMNI_VERSION}"
 K8S_VERSION="${K8S_VERSION:-1.35.0}"
@@ -58,7 +73,7 @@ chmod +x ${OMNICTL}
 if [[ "${CI:-false}" == "true" ]]; then
   REGISTRY_MIRROR_FLAGS=()
 
-  for registry in docker.io k8s.gcr.io quay.io gcr.io ghcr.io registry.k8s.io factory.talos.dev; do
+  for registry in docker.io k8s.gcr.io quay.io gcr.io ghcr.io registry.k8s.io; do
     service="registry-${registry//./-}.ci.svc"
     addr=$(python3 -c "import socket; print(socket.gethostbyname('${service}'))")
 
@@ -114,16 +129,22 @@ sleep 5
 
 # Launch Omni in the background.
 #
+# Omni requires an authentication provider, but nobody logs in during the test, everything goes through
+# the initial service account. The Auth0 provider only contacts its domain when a user logs in, so
+# placeholder values are enough and no identity provider is needed.
+#
 # Omni runs with --network host and advertises the docker bridge gateway (${DOCKER_GATEWAY}) to
 # joining VMs. Each pve container's vmbr1 is later re-bridged onto its eth0 (the docker network),
 # so VMs come up directly on the docker subnet and reach the gateway on the host without NAT.
 
 export BASE_URL=https://localhost:8099/
-export AUTH_USERNAME="${AUTH0_TEST_USERNAME}"
-export AUTH0_CLIENT_ID="${AUTH0_CLIENT_ID}"
-export AUTH0_DOMAIN="${AUTH0_DOMAIN}"
 
 mkdir -p _out/omni/
+
+# Omni reads the image factory token from a file, placed in the mounted directory that is not uploaded as an artifact.
+set +x # keep the token out of the trace
+printf '%s' "${IMAGE_FACTORY_TOKEN}" >_out/omni/factory-token
+set -x
 
 docker run -it -d --network host -v ./hack/certs:/certs \
     -v $(pwd)/_out/omni:/_out \
@@ -139,11 +160,11 @@ docker run -it -d --network host -v ./hack/certs:/certs \
     --machine-api-bind-addr 0.0.0.0:8090 \
     --siderolink-wireguard-bind-addr 0.0.0.0:50180 \
     --event-sink-port 8091 \
-    --auth-auth0-enabled true \
     --advertised-api-url "${BASE_URL}" \
-    --auth-auth0-client-id "${AUTH0_CLIENT_ID}" \
-    --auth-auth0-domain "${AUTH0_DOMAIN}" \
-    --initial-users "${AUTH_USERNAME}" \
+    --auth-auth0-enabled true \
+    --auth-auth0-client-id placeholder \
+    --auth-auth0-domain auth0.invalid \
+    --initial-users test-user@siderolabs.com \
     --private-key-source "vault://secret/omni-private-key" \
     --public-key-files "/certs/key.public" \
     --bind-addr 0.0.0.0:8099 \
@@ -155,6 +176,9 @@ docker run -it -d --network host -v ./hack/certs:/certs \
     --initial-service-account-key-path=/_out/key \
     --eula-accept-email test-user@siderolabs.com \
     --eula-accept-name "Test User" \
+    --primary-factory-url "${IMAGE_FACTORY_URL}" \
+    --primary-factory-token-file /_out/factory-token \
+    --primary-factory-machine-token-ttl 8h \
     "${REGISTRY_MIRROR_FLAGS[@]}"
 
 docker logs -f omni &> ${TMP}/omni.log &

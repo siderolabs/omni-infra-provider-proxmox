@@ -191,7 +191,7 @@ Requirements on the host running the tests:
 
 - Linux kernel 6.8+ with `/dev/kvm` (Intel VT-x or AMD-V enabled)
 - Docker 26+ with privileged containers permitted
-- `sops` installed and a decryptable `.secrets.yaml` providing `AUTH0_TEST_USERNAME`, `AUTH0_CLIENT_ID`, `AUTH0_DOMAIN`
+- `IMAGE_FACTORY_ENTERPRISE_STAGING_TOKEN` set in the environment, an API token for the staging enterprise image factory (CI reads it from the sops-encrypted `.secrets.yaml`). `IMAGE_FACTORY_ENTERPRISE_ENV=prod` selects the production factory and its token `IMAGE_FACTORY_ENTERPRISE_PROD_TOKEN` instead.
 
 Run it via:
 
