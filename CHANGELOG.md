@@ -1,3 +1,59 @@
+## [Omni Infra Provider Proxmox 0.3.0](https://github.com/siderolabs/omni-infra-provider-proxmox/releases/tag/v0.3.0) (2026-09-16)
+
+Welcome to the v0.3.0 release of Omni Infra Provider Proxmox!
+
+
+
+Please try out the release binaries and report any issues at
+https://github.com/siderolabs/omni-infra-provider-proxmox/issues.
+
+### Installation Media Through Omni
+
+Previously, the provider built the image factory URL itself. This only worked as long as the downloads stayed anonymous.
+
+Omni now resolves the installation media and returns a URL which the Proxmox node can download on its own. This way, an image factory that authenticates its downloads works as well.
+
+The ISO is stored under a name which stays the same when the credentials are rotated, so rotating them does not leave an unused ISO behind on the node.
+
+
+### USB Device Passthrough
+
+Machines can now be provisioned with USB devices passed through from the Proxmox node. The devices are declared as Proxmox resource mappings.
+
+Each device is assigned to a fixed USB slot, and can optionally use the USB 3 controller.
+
+
+### Contributors
+
+* Utku Ozdemir
+* Artem Chernyshev
+* Mitch Ross
+* Oguz Kilcan
+
+### Changes
+<details><summary>5 commits</summary>
+<p>
+
+* [`fec0866`](https://github.com/siderolabs/omni-infra-provider-proxmox/commit/fec0866db8c8a2ef44886ff991d2d0c793c54e4c) test: run the integration tests against the enterprise image factory
+* [`2276ac7`](https://github.com/siderolabs/omni-infra-provider-proxmox/commit/2276ac77fa817f40fab5d4201a6fefd9c3d8e6d4) chore: rekres
+* [`7cefedd`](https://github.com/siderolabs/omni-infra-provider-proxmox/commit/7cefeddbf2145bc400e3b529e6d5dfe08c27194a) feat: resolve the ISO through Omni's installation media API
+* [`d5ac04d`](https://github.com/siderolabs/omni-infra-provider-proxmox/commit/d5ac04dd8367bcc155e86fe1c1264f7e98281b79) feat: add USB device passthrough
+* [`8b085a2`](https://github.com/siderolabs/omni-infra-provider-proxmox/commit/8b085a264265303f6d5605c719320380987aebe4) fix: improve checks for nodes removed bypassing the infra provider
+</p>
+</details>
+
+### Dependency Changes
+
+* **github.com/luthermonson/go-proxmox**         v0.7.1 -> v0.8.1
+* **github.com/planetscale/vtprotobuf**          ba97887b0a25 -> 8ae5a48058df
+* **github.com/siderolabs/omni/client**          582730ce940c -> b1341200b16d
+* **github.com/siderolabs/talos/pkg/machinery**  v1.14.0-alpha.2 -> 322de8bf2974
+* **github.com/stretchr/testify**                v1.11.1 -> v1.12.1
+* **go.yaml.in/yaml/v4**                         v4.0.0-rc.6 -> 643e93b9c9be
+* **google.golang.org/protobuf**                 f2248ac996af -> v1.36.12
+
+Previous release can be found at [v0.2.0](https://github.com/siderolabs/omni-infra-provider-proxmox/releases/tag/v0.2.0)
+
 ## [Omni Infra Provider Proxmox 0.2.0](https://github.com/siderolabs/omni-infra-provider-proxmox/releases/tag/v0.2.0) (2026-07-23)
 
 Welcome to the v0.2.0 release of Omni Infra Provider Proxmox!

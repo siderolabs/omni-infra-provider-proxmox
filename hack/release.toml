@@ -5,42 +5,23 @@ project_name = "Omni Infra Provider Proxmox"
 github_repo = "siderolabs/omni-infra-provider-proxmox"
 match_deps = "^github.com/(siderolabs/[a-zA-Z0-9-]+)$"
 
-previous = "v0.1.0"
+previous = "v0.2.0"
 pre_release = false
 
-[notes.versioning-support]
-title = "Add Versioning Support"
+[notes.installation-media]
+title = "Installation Media Through Omni"
 description = """\
-The infra provider will now report its version to Omni.
+Previously, the provider built the image factory URL itself. This only worked as long as the downloads stayed anonymous.
+
+Omni now resolves the installation media and returns a URL which the Proxmox node can download on its own. This way, an image factory that authenticates its downloads works as well.
+
+The ISO is stored under a name which stays the same when the credentials are rotated, so rotating them does not leave an unused ISO behind on the node.
 """
 
-[notes.ha-support]
-title = "Proxmox HA Support"
+[notes.usb-passthrough]
+title = "USB Device Passthrough"
 description = """\
-Machines can now be registered with Proxmox HA, with the provider managing \
-HA resources and resource-affinity rules for provisioning and teardown, \
-including tolerating Proxmox rejecting an infeasible affinity rule.
-"""
+Machines can now be provisioned with USB devices passed through from the Proxmox node. The devices are declared as Proxmox resource mappings.
 
-[notes.placement-strategies]
-title = "Node Placement Strategies"
-description = """\
-Added configurable placement strategies for node selection when provisioning \
-machines across a Proxmox cluster, declared as an enum in the provider schema.
-"""
-
-[notes.firmware-options]
-title = "Firmware Display Options"
-description = """\
-Added options to control how machine firmware is displayed.
-"""
-
-[notes.fixes]
-title = "Bug Fixes and Improvements"
-description = """\
-- Fixed the scheduler failing to release its reservation on deprovision.
-- Fixed node selection clumping onto a single node and causing OOM on \
-non-exclusive Proxmox clusters.
-- Fixed ISO images not being re-downloaded when a prior download task failed.
-- Various dependency updates, including go-proxmox.
+Each device is assigned to a fixed USB slot, and can optionally use the USB 3 controller.
 """
