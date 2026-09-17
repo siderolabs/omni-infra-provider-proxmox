@@ -5,6 +5,7 @@
 package provider_test
 
 import (
+	"net/netip"
 	"testing"
 	"time"
 
@@ -390,4 +391,95 @@ func TestBuildUSBDeviceOptions(t *testing.T) {
 		"usb0": "mapping=rtl-sdr,usb3=1",
 		"usb1": "mapping=zigbee-controller",
 	}, provider.BuildUSBDeviceOptions(devices))
+}
+
+func TestParseIPAllocation(t *testing.T) {
+	for _, valid := range []string{"", "dhcp", "deterministic"} {
+		_, err := provider.ParseIPAllocation(valid)
+		require.NoError(t, err)
+	}
+
+	_, err := provider.ParseIPAllocation("bogus")
+	require.Error(t, err)
+}
+
+func TestAllocateIPDHCPReturnsNoAddress(t *testing.T) {
+	_, ok, err := provider.AllocateIP("dhcp", netip.MustParsePrefix("10.0.16.0/20"), netip.Addr{}, 105)
+
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
+func TestAllocateIPDeterministicFromVMID(t *testing.T) {
+	addr, ok, err := provider.AllocateIP(
+		"deterministic", netip.MustParsePrefix("10.0.16.0/20"), netip.MustParseAddr("10.0.16.1"), 105,
+	)
+
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "10.0.16.105", addr.String())
+}
+
+func TestAllocateIPNeverReturnsGateway(t *testing.T) {
+	subnet := netip.MustParsePrefix("10.0.16.0/20")
+	gateway := netip.MustParseAddr("10.0.16.1")
+
+	// vmid 1 maps to host offset 1, which is the gateway's own address.
+	addr, ok, err := provider.AllocateIP("deterministic", subnet, gateway, 1)
+
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NotEqual(t, gateway.String(), addr.String())
+}
+
+func TestAllocateIPRejectsGatewayOutsideSubnet(t *testing.T) {
+	subnet := netip.MustParsePrefix("10.0.16.0/20")
+
+	_, _, err := provider.AllocateIP("deterministic", subnet, netip.MustParseAddr("10.0.1.1"), 105)
+	require.Error(t, err, "gateway below the subnet must not underflow past the range check")
+}
+
+func TestAllocateIPRejectsGatewayAsNetworkOrBroadcast(t *testing.T) {
+	subnet := netip.MustParsePrefix("10.0.16.0/20")
+
+	_, _, err := provider.AllocateIP("deterministic", subnet, netip.MustParseAddr("10.0.16.0"), 105)
+	require.Error(t, err, "network address is not a usable gateway host")
+
+	_, _, err = provider.AllocateIP("deterministic", subnet, netip.MustParseAddr("10.0.31.255"), 105)
+	require.Error(t, err, "broadcast address is not a usable gateway host")
+}
+
+func TestAllocateIPCollidesOnceFleetExceedsSubnetCapacity(t *testing.T) {
+	// Documents the known ceiling: VMIDs a maxHosts apart map to the same
+	// host. /30 has maxHosts=2, so vmid 1 and vmid 3 collide.
+	subnet := netip.MustParsePrefix("10.0.16.0/30")
+
+	a, _, err := provider.AllocateIP("deterministic", subnet, netip.Addr{}, 1)
+	require.NoError(t, err)
+
+	b, _, err := provider.AllocateIP("deterministic", subnet, netip.Addr{}, 3)
+	require.NoError(t, err)
+
+	require.Equal(t, a.String(), b.String())
+}
+
+func TestBuildNetworkConfig(t *testing.T) {
+	cfg, err := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{"10.0.19.1", "10.0.19.2"})
+
+	require.NoError(t, err)
+	require.Contains(t, cfg, "address: 10.0.16.105/20")
+	require.Contains(t, cfg, "gateway: 10.0.16.1")
+	require.Contains(t, cfg, "- 10.0.19.1")
+	require.Contains(t, cfg, "- 10.0.19.2")
+}
+
+func TestBuildNetworkConfigRejectsMalformedDNS(t *testing.T) {
+	_, err := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{"10.0.19.1\n  - type: something-else"})
+	require.Error(t, err, "a malformed DNS entry (e.g. one smuggling YAML) must not reach rendered output")
+}
+
+func TestBuildNetworkConfigCanonicalizesDNS(t *testing.T) {
+	cfg, err := provider.BuildNetworkConfig("10.0.16.105/20", "10.0.16.1", []string{" 10.0.19.1 "})
+	require.NoError(t, err)
+	require.Contains(t, cfg, "- 10.0.19.1\n")
 }
