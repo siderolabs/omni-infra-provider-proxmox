@@ -3,13 +3,13 @@ module github.com/siderolabs/omni-infra-provider-proxmox
 go 1.26.7
 
 require (
-	github.com/cosi-project/runtime v1.16.2
-	github.com/google/cel-go v0.31.0
+	github.com/cosi-project/runtime v1.16.3
+	github.com/google/cel-go v0.32.0
 	github.com/google/uuid v1.6.0
-	github.com/luthermonson/go-proxmox v0.8.1
+	github.com/luthermonson/go-proxmox v0.8.2
 	github.com/planetscale/vtprotobuf v0.6.1-0.20260702190614-8ae5a48058df
-	github.com/siderolabs/omni/client v1.10.0-beta.0.0.20260829003502-b1341200b16d
-	github.com/siderolabs/talos/pkg/machinery v1.14.0-rc.2.0.20260825161121-322de8bf2974
+	github.com/siderolabs/omni/client v1.12.4
+	github.com/siderolabs/talos/pkg/machinery v1.14.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/zap v1.28.0
