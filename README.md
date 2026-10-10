@@ -143,6 +143,101 @@ Devices are assigned to `usb0`, `usb1`, and subsequent slots in list order.
 When a machine can run on multiple Proxmox nodes, define each mapping on every
 eligible node.
 
+### Static Networking (no DHCP)
+
+By default VMs use DHCP. Setting `network_subnet` switches the machine class to static
+IPv4/IPv6 addressing, injected via cloud-init network-config. Leave it unset and DHCP
+behavior is unchanged.
+
+Two addressing modes are supported.
+
+**Explicit** — a single fixed IP. Use this for single-machine classes (e.g. a
+specific control-plane node); if a class provisions more than one machine they
+would all receive the same IP.
+
+```yaml
+providerdata: |
+  storage_selector: name == "local-lvm"
+  network_bridge: vmbr1
+  vlan: 2501
+  network_subnet: 192.168.26.0/24
+  network_gateway: 192.168.26.1
+  network_nameservers:
+    - 8.8.8.8
+    - 8.8.4.4
+  network_ip: 192.168.26.31
+```
+
+**VMID-derived** — a unique IP per machine in a set, derived from the VM's VMID:
+
+```text
+ip = network_base_ip + (vmid - vmid_range.start)
+```
+
+The provider allocates each VM's VMID from `vmid_range` (lowest free first), so
+each machine gets a distinct, deterministic address.
+
+```yaml
+providerdata: |
+  storage_selector: name == "local-lvm"
+  network_bridge: vmbr1
+  vlan: 2501
+  vmid_range: 5300-5350
+  network_subnet: 192.168.26.0/24
+  network_gateway: 192.168.26.1
+  network_nameservers:
+    - 8.8.8.8
+  network_base_ip: 192.168.26.10   # vmid 5300 -> .10, vmid 5304 -> .14
+```
+
+**IPv6** works the same way — use IPv6 values and the provider emits the correct
+config automatically. A class is single-family (IPv4 **or** IPv6), not
+dual-stack:
+
+```yaml
+providerdata: |
+  storage_selector: name == "local-lvm"
+  network_bridge: vmbr1
+  vmid_range: 5300-5350
+  network_subnet: 2001:db8::/64
+  network_gateway: 2001:db8::1
+  network_nameservers:
+    - 2001:4860:4860::8888
+  network_base_ip: 2001:db8::10   # vmid 5304 -> 2001:db8::14
+```
+
+**MTU** — on an overlay fabric (VXLAN/EVPN, WireGuard, any bridge below 1500) set
+`network_mtu` to the bridge MTU. Proxmox does not propagate the bridge MTU to the
+guest NIC unless it is configured, so without this the VM comes up at 1500 and
+silently drops oversized frames:
+
+```yaml
+providerdata: |
+  network_bridge: prodapp
+  network_subnet: 10.80.2.0/24
+  network_gateway: 10.80.2.1
+  network_ip: 10.80.2.101
+  network_mtu: 1450
+```
+
+Notes:
+
+- `network_subnet` is what turns static addressing on (CIDR, IPv4 or IPv6); it supplies
+  the prefix, and the family is inferred from it, so all other addresses must match.
+  Set exactly one of `network_ip` or `network_base_ip`. `network_base_ip` requires
+  `vmid_range`.
+- Configuration is validated up front: `network_base_ip` plus the full range width must
+  fit inside `network_subnet`, and IPs may not be the subnet network address (or the
+  IPv4 broadcast address) — a bad config fails the whole machine class
+  immediately.
+- `network_mtu` must be at least 576 (IPv4) or 1280 (IPv6). Unset means the link keeps
+  whatever the hypervisor hands it.
+- The derived IP is stable per **VMID**, not per logical node. Deprovision +
+  reprovision reuses the lowest free VMID (fills holes first), so addresses are
+  recycled rather than permanently reserved.
+- Dedicate the `vmid_range` to this class. If Proxmox already holds a guest with
+  a VMID inside the range, allocation skips it, which shifts the derived offsets.
+
 ### High Availability
 
 Adding an `ha:` block to the machine class registers each provisioned VM as a Proxmox HA resource

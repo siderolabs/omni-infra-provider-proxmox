@@ -17,31 +17,55 @@ type Data struct {
 	Node            string `yaml:"node,omitempty"`
 	StorageSelector string `yaml:"storage_selector,omitempty"`
 	NetworkBridge   string `yaml:"network_bridge"`
-	Hugepages       string `yaml:"hugepages,omitempty"`
-	MachineType     string `yaml:"machine_type,omitempty"`
-	Bios            string `yaml:"bios,omitempty"`
-	VGA             string `yaml:"vga,omitempty"`
-	CPUType         string `yaml:"cpu_type,omitempty"`
-	DiskAIO         string `yaml:"disk_aio,omitempty"`
-	DiskCache       string `yaml:"disk_cache,omitempty"`
-	Pool            string `yaml:"pool,omitempty"`
+	// NetworkSubnet switches the VM from DHCP to static addressing: when set, the
+	// provider renders a cloud-init network-config v1 document instead of the DHCP
+	// default. It is the CIDR the address lives in, e.g. "192.168.26.0/24", and it
+	// supplies the prefix length. Leave empty to keep DHCP.
+	NetworkSubnet string `yaml:"network_subnet,omitempty"`
+	// NetworkGateway is the optional default gateway for the static address.
+	NetworkGateway string `yaml:"network_gateway,omitempty"`
+	// NetworkIP assigns this exact address to the VM (explicit mode). Mutually
+	// exclusive with NetworkBaseIP.
+	NetworkIP string `yaml:"network_ip,omitempty"`
+	// NetworkBaseIP is the address given to the VM whose VMID equals the start of
+	// VMIDRange (derived mode); every other VM in the set is offset by its VMID
+	// distance from that start. Requires VMIDRange. Mutually exclusive with NetworkIP.
+	NetworkBaseIP string `yaml:"network_base_ip,omitempty"`
+	Hugepages     string `yaml:"hugepages,omitempty"`
+	MachineType   string `yaml:"machine_type,omitempty"`
+	Bios          string `yaml:"bios,omitempty"`
+	VGA           string `yaml:"vga,omitempty"`
+	CPUType       string `yaml:"cpu_type,omitempty"`
+	DiskAIO       string `yaml:"disk_aio,omitempty"`
+	DiskCache     string `yaml:"disk_cache,omitempty"`
+	Pool          string `yaml:"pool,omitempty"`
 	// PlacementStrategy selects how a node is chosen for an auto-provisioned VM:
 	// spread (default), fewer-vms, round-robin or binpack.
-	PlacementStrategy string           `yaml:"placement_strategy,omitempty"`
-	AdditionalDisks   []AdditionalDisk `yaml:"additional_disks,omitempty"`
-	AdditionalNICs    []AdditionalNIC  `yaml:"additional_nics,omitempty"`
-	PCIDevices        []PCIDevice      `yaml:"pci_devices,omitempty"`
-	USBDevices        []USBDevice      `yaml:"usb_devices,omitempty"`
-	Tags              []string         `yaml:"tags,omitempty"`
-	Vlan              uint64           `yaml:"vlan"`
-	Memory            uint64           `yaml:"memory"`
-	Sockets           int              `yaml:"sockets"`
-	DiskSize          int              `yaml:"disk_size"`
-	Cores             int              `yaml:"cores"`
-	DiskIOThread      bool             `yaml:"disk_iothread,omitempty"`
-	NUMA              bool             `yaml:"numa,omitempty"`
-	DiskDiscard       bool             `yaml:"disk_discard,omitempty"`
-	DiskSSD           bool             `yaml:"disk_ssd,omitempty"`
+	PlacementStrategy string `yaml:"placement_strategy,omitempty"`
+	// VMIDRange constrains VMID allocation to "start-end" (e.g. "200-250") and,
+	// when set together with NetworkBaseIP, enables VMID-derived static IPs.
+	VMIDRange string `yaml:"vmid_range,omitempty"`
+	// NetworkNameservers are the optional DNS servers written into the static
+	// network-config.
+	NetworkNameservers []string         `yaml:"network_nameservers,omitempty"`
+	AdditionalDisks    []AdditionalDisk `yaml:"additional_disks,omitempty"`
+	AdditionalNICs     []AdditionalNIC  `yaml:"additional_nics,omitempty"`
+	PCIDevices         []PCIDevice      `yaml:"pci_devices,omitempty"`
+	USBDevices         []USBDevice      `yaml:"usb_devices,omitempty"`
+	Tags               []string         `yaml:"tags,omitempty"`
+	Vlan               uint64           `yaml:"vlan"`
+	Memory             uint64           `yaml:"memory"`
+	Sockets            int              `yaml:"sockets"`
+	DiskSize           int              `yaml:"disk_size"`
+	Cores              int              `yaml:"cores"`
+	// NetworkMTU, when set, is written into the static network-config as the link
+	// MTU. Required on overlay fabrics (VXLAN/EVPN) where the bridge MTU is below
+	// 1500 and the guest would otherwise come up at 1500 and black-hole large frames.
+	NetworkMTU   int  `yaml:"network_mtu,omitempty"`
+	DiskIOThread bool `yaml:"disk_iothread,omitempty"`
+	NUMA         bool `yaml:"numa,omitempty"`
+	DiskDiscard  bool `yaml:"disk_discard,omitempty"`
+	DiskSSD      bool `yaml:"disk_ssd,omitempty"`
 }
 
 // AdditionalDisk represents an additional disk configuration.

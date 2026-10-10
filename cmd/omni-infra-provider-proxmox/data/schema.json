@@ -52,6 +52,41 @@
       "type": "boolean",
       "description": "Enable per-VM firewall (fwbr) on primary NIC. Defaults to true. Set false when L2-broadcast services need traffic to bypass fwbr."
     },
+    "network_subnet": {
+      "type": "string",
+      "description": "Switches the VM from DHCP to static addressing, injected via cloud-init network-config. Subnet in CIDR notation, e.g. '192.168.26.0/24' or '2001:db8::/64'; supplies the prefix length and the address family for the other network_* fields. Leave empty for DHCP. Single-family per machine class."
+    },
+    "network_gateway": {
+      "type": "string",
+      "description": "Default gateway for the static address, e.g. '192.168.26.1'. Must be in the same family as network_subnet."
+    },
+    "network_nameservers": {
+      "type": "array",
+      "description": "DNS nameserver IP addresses for the static address.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "network_ip": {
+      "type": "string",
+      "description": "Explicit static IP for this VM, e.g. '192.168.26.31'. Use for single-machine classes (a shared class would assign every machine the same IP). Mutually exclusive with network_base_ip."
+    },
+    "network_base_ip": {
+      "type": "string",
+      "description": "Base IP for VMID-derived addressing: each VM gets base_ip + (vmid - vmid_range start), so a machine set gets unique deterministic IPs. Requires vmid_range. Mutually exclusive with network_ip."
+    },
+    "network_mtu": {
+      "type": "integer",
+      "minimum": 576,
+      "maximum": 65535,
+      "description": "Link MTU written into the static network config. Set this on overlay fabrics (VXLAN/EVPN/WireGuard) where the bridge MTU is below 1500, otherwise the guest comes up at 1500 and silently drops oversized frames. IPv6 subnets require at least 1280."
+    },
+    "vmid_range": {
+      "type": "string",
+      "pattern": "^[0-9]+-[0-9]+$",
+      "description": "Restrict VMID allocation to an inclusive \"start-end\" range (e.g. \"200-250\") instead of Proxmox NextID. Required when using network_base_ip for VMID-derived static IPs. Dedicate the range to this machine class."
+    },
     "disk_ssd": {
       "type": "boolean",
       "description": "Enable SSD emulation (ssd=1) for better performance on SSD/NVMe storage"
