@@ -125,6 +125,77 @@ config:
 
 Replace `"local-lvm"` with the name of the storage you want to use for VM disks in your Proxmox cluster.
 
+### Additional Disks
+
+Besides the primary boot disk (`diskSize`, attached as `scsi0`), additional data disks
+can be attached to each provisioned VM. Every additional disk requires its own
+`storage_selector` CEL expression and occupies `scsi1`, `scsi2`, and subsequent slots
+in list order.
+
+```yaml
+config:
+  ...
+  additional_disks:
+    - disk_size: 100 # in GB
+      storage_selector: 'name == "local-lvm"'
+      disk_ssd: true
+      disk_discard: true
+    - disk_size: 200
+      storage_selector: 'name == "fast-nvme"'
+      disk_iothread: true
+      disk_cache: writethrough
+      disk_aio: io_uring
+```
+
+Supported per-disk options: `disk_ssd`, `disk_discard`, `disk_iothread`,
+`disk_cache` (`none`, `writethrough`, `writeback`, `directsync`, `unsafe`),
+and `disk_aio` (`native`, `threads`, `io_uring`).
+
+This is particularly useful for storage workloads: for example, Longhorn can
+consume the extra disks via a Talos `UserVolumeConfig` patch that selects
+non-system disks.
+
+### Additional Network Interfaces
+
+Additional NICs can be attached beyond the primary `net0` interface.
+They occupy `net1`, `net2`, and subsequent slots in list order.
+
+```yaml
+config:
+  ...
+  additional_nics:
+    - bridge: vmbr1
+      vlan: 10
+      firewall: false
+    - bridge: vmbr2 # storage network
+```
+
+Supported options: `bridge` (required), `vlan` (optional VLAN tag) and
+`firewall` (enable the per-interface firewall, default `false`).
+
+### PCI Device Passthrough
+
+PCI devices can be attached through Proxmox Resource Mappings.
+Define the mapping under **Datacenter → Resource Mappings → PCI Devices**,
+then reference its name in the machine class. Devices occupy `hostpci0`,
+`hostpci1`, and subsequent slots in list order.
+
+```yaml
+config:
+  ...
+  machine_type: q35 # recommended for GPU passthrough
+  pci_devices:
+    - mapping: nvidia-gpu-1
+      pcie: true
+      primary_gpu: true
+    - mapping: intel-igpu
+      mdev: i915-GVTg_V5_8
+```
+
+Supported options: `mapping` (required), `mdev` (mediated device name),
+`pcie` (use PCIe instead of PCI), `primary_gpu` (`x-vga=1`) and `rombar`
+(set `false` to disable the ROM BAR).
+
 ### USB Device Passthrough
 
 USB devices can be attached through Proxmox Resource Mappings.
