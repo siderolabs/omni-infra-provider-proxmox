@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	"github.com/google/uuid"
 	"github.com/luthermonson/go-proxmox"
 	"github.com/siderolabs/omni/client/pkg/imagefactory"
@@ -196,11 +196,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			media, err := pctx.EnsureInstallationMedia(
 				ctx, logger, provision.MediaSpec{
-					MediaSpec: imagefactory.MediaSpec{
-						Kind:         imagefactory.InstallationMediaKindISO,
-						Platform:     "nocloud",
-						Architecture: "amd64",
-					},
+					Kind:          imagefactory.InstallationMediaKindISO,
+					Platform:      "nocloud",
+					Architecture:  "amd64",
 					StandaloneURL: true,
 				},
 				provision.WithExtraExtensions("siderolabs/qemu-guest-agent"),
