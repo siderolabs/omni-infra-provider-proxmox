@@ -156,7 +156,7 @@ docker run -it -d --network host -v ./hack/certs:/certs \
     --name omni \
     ${OMNI_IMAGE} \
     --siderolink-wireguard-advertised-addr ${DOCKER_GATEWAY}:50180 \
-    --siderolink-api-advertised-url "grpc://${DOCKER_GATEWAY}:8090" \
+    --machine-api-advertised-url "grpc://${DOCKER_GATEWAY}:8090" \
     --machine-api-bind-addr 0.0.0.0:8090 \
     --siderolink-wireguard-bind-addr 0.0.0.0:50180 \
     --event-sink-port 8091 \
