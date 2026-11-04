@@ -202,6 +202,25 @@ function wait_pve_ready() {
 wait_pve_ready pve-1
 wait_pve_ready pve-2
 
+# The CI runners disable io_uring host-wide (kernel.io_uring_disabled=2), and Proxmox uses aio=io_uring for every
+# drive without an explicit aio setting, so QEMU fails to start the VMs. Make qemu-server fall back to aio=threads
+# (or native with O_DIRECT) for all storages, as it does for the storages where io_uring is known to misbehave.
+
+function disable_io_uring_default() {
+  local name="$1"
+  local drive_pm=/usr/share/perl5/PVE/QemuServer/Drive.pm
+
+  docker exec "${name}" grep -q '^sub storage_allows_io_uring_default {$' "${drive_pm}"
+  docker exec "${name}" sed -i 's/^sub storage_allows_io_uring_default {$/&\n    return;/' "${drive_pm}"
+  docker exec "${name}" systemctl restart pvedaemon pveproxy
+}
+
+disable_io_uring_default pve-1
+disable_io_uring_default pve-2
+
+wait_pve_ready pve-1
+wait_pve_ready pve-2
+
 # /etc/hosts: each node must resolve the other for corosync + pvecm.
 
 function setup_hosts() {
