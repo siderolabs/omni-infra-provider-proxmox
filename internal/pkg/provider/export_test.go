@@ -8,6 +8,11 @@ import "time"
 
 type NodeStatus = nodeStatus
 
+var (
+	ErrTaskFailed = errTaskFailed
+	TaskFailure   = taskFailure
+)
+
 func PickNode(nodes []NodeStatus) NodeStatus {
 	return pickNode(nodes)
 }

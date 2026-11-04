@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -31,7 +32,13 @@ import (
 const (
 	machineRequestTagPrefix = "machine-request."
 	poolComment             = "managed by omni-infra-provider-proxmox"
+
+	// taskLogTailLines is how many of the last task log lines a task failure error carries.
+	taskLogTailLines = 10
 )
+
+// errTaskFailed is returned for a Proxmox task that finished without success.
+var errTaskFailed = errors.New("proxmox task failed")
 
 // Provisioner implements Talos emulator infra provider.
 type Provisioner struct {
@@ -174,7 +181,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		provision.NewStep("uploadISO", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VolumeUploadTask != "" {
 				err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VolumeUploadTask)
-				if err != nil && err.Error() != "stopped" {
+				if err != nil && !errors.Is(err, errTaskFailed) {
 					return err
 				}
 
@@ -182,7 +189,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return nil
 				}
 
-				logger.Info("retrying download")
+				logger.Info("retrying download", zap.Error(err))
 			}
 
 			pctx.State.TypedSpec().Value.TalosVersion = pctx.GetTalosVersion()
@@ -596,6 +603,13 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		provision.NewStep("startVM", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VmStartTask != "" {
 				if err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VmStartTask); err != nil {
+					if errors.Is(err, errTaskFailed) {
+						// start the VM again on the next attempt instead of checking the same failed task forever
+						pctx.State.TypedSpec().Value.VmStartTask = ""
+
+						return provision.NewRetryError(err, time.Minute)
+					}
+
 					return err
 				}
 			} else {
@@ -949,7 +963,7 @@ func (p *Provisioner) checkTaskStatus(ctx context.Context, id string) error {
 		return nil
 	}
 
-	return errors.New(t.Status)
+	return taskFailure(ctx, t)
 }
 
 func (p *Provisioner) waitForTaskToFinish(ctx context.Context, t *proxmox.Task) error {
@@ -968,12 +982,45 @@ func (p *Provisioner) waitForTaskToFinish(ctx context.Context, t *proxmox.Task) 
 
 			switch {
 			case t.IsFailed:
-				return errors.New(t.Status)
+				return taskFailure(ctx, t)
 			case t.IsSuccessful:
 				return nil
 			}
 		}
 	}
+}
+
+// taskFailure builds the error for a task that finished without success. Proxmox puts only a short
+// summary into the exit status (e.g., "start failed: QEMU exited with code 1"), the actual reason is in
+// the task log, so the error carries the last lines of it too.
+func taskFailure(ctx context.Context, t *proxmox.Task) error {
+	err := fmt.Errorf("%w: %s %s on node %q: %s", errTaskFailed, t.Type, t.ID, t.Node, cmp.Or(t.ExitStatus, t.Status))
+
+	log, logErr := t.Log(ctx, 0, 1000)
+	if logErr != nil {
+		return fmt.Errorf("%w (failed to read the task log: %w)", err, logErr)
+	}
+
+	lineNumbers := slices.Sorted(maps.Keys(log))
+
+	lines := make([]string, 0, len(lineNumbers))
+
+	for _, n := range lineNumbers {
+		line := strings.TrimSpace(log[n])
+
+		// the final "TASK ERROR: ..." line repeats the exit status
+		if line == "" || strings.HasPrefix(line, "TASK ") {
+			continue
+		}
+
+		lines = append(lines, line)
+	}
+
+	if len(lines) == 0 {
+		return err
+	}
+
+	return fmt.Errorf("%w, task log: %s", err, strings.Join(lines[max(0, len(lines)-taskLogTailLines):], " | "))
 }
 
 type nodeStatus struct {
