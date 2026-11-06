@@ -38,6 +38,8 @@ type MachineSpec struct {
 	Vmid             int32                  `protobuf:"varint,11,opt,name=vmid,proto3" json:"vmid,omitempty"`
 	Pool             string                 `protobuf:"bytes,12,opt,name=pool,proto3" json:"pool,omitempty"`
 	HaRegistered     bool                   `protobuf:"varint,13,opt,name=ha_registered,json=haRegistered,proto3" json:"ha_registered,omitempty"`
+	StartAttempts    int32                  `protobuf:"varint,14,opt,name=start_attempts,json=startAttempts,proto3" json:"start_attempts,omitempty"`
+	Failure          string                 `protobuf:"bytes,15,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -149,11 +151,25 @@ func (x *MachineSpec) GetHaRegistered() bool {
 	return false
 }
 
+func (x *MachineSpec) GetStartAttempts() int32 {
+	if x != nil {
+		return x.StartAttempts
+	}
+	return 0
+}
+
+func (x *MachineSpec) GetFailure() string {
+	if x != nil {
+		return x.Failure
+	}
+	return ""
+}
+
 var File_specs_specs_proto protoreflect.FileDescriptor
 
 const file_specs_specs_proto_rawDesc = "" +
 	"\n" +
-	"\x11specs/specs.proto\x12\bemuspecs\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xda\x02\n" +
+	"\x11specs/specs.proto\x12\bemuspecs\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\x9b\x03\n" +
 	"\vMachineSpec\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x1c\n" +
 	"\tschematic\x18\x02 \x01(\tR\tschematic\x12#\n" +
@@ -165,7 +181,9 @@ const file_specs_specs_proto_rawDesc = "" +
 	"\rvm_start_task\x18\b \x01(\tR\vvmStartTask\x12\x12\n" +
 	"\x04vmid\x18\v \x01(\x05R\x04vmid\x12\x12\n" +
 	"\x04pool\x18\f \x01(\tR\x04pool\x12#\n" +
-	"\rha_registered\x18\r \x01(\bR\fhaRegisteredB=Z;github.com/siderolabs/omni-infra-provider-proxmox/api/specsb\x06proto3"
+	"\rha_registered\x18\r \x01(\bR\fhaRegistered\x12%\n" +
+	"\x0estart_attempts\x18\x0e \x01(\x05R\rstartAttempts\x12\x18\n" +
+	"\afailure\x18\x0f \x01(\tR\afailureB=Z;github.com/siderolabs/omni-infra-provider-proxmox/api/specsb\x06proto3"
 
 var (
 	file_specs_specs_proto_rawDescOnce sync.Once
