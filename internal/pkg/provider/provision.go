@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"cel.dev/cel-go/cel"
+	"github.com/cosi-project/runtime/pkg/controller"
 	"github.com/google/uuid"
 	"github.com/luthermonson/go-proxmox"
 	"github.com/siderolabs/omni/client/pkg/imagefactory"
@@ -25,6 +26,7 @@ import (
 	siderocel "github.com/siderolabs/talos/pkg/machinery/cel"
 	"go.uber.org/zap"
 
+	"github.com/siderolabs/omni-infra-provider-proxmox/api/specs"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/ha"
 	"github.com/siderolabs/omni-infra-provider-proxmox/internal/pkg/provider/resources"
 )
@@ -35,6 +37,9 @@ const (
 
 	// taskLogTailLines is how many of the last task log lines a task failure error carries.
 	taskLogTailLines = 10
+
+	// maxStartAttempts is how many failed vm.Start() tasks are tolerated before the VM is destroyed.
+	maxStartAttempts = 5
 )
 
 // errTaskFailed is returned for a Proxmox task that finished without success.
@@ -181,12 +186,8 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		provision.NewStep("uploadISO", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 			if pctx.State.TypedSpec().Value.VolumeUploadTask != "" {
 				err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VolumeUploadTask)
-				if err != nil && !errors.Is(err, errTaskFailed) {
+				if !isTaskFailed(err) {
 					return err
-				}
-
-				if err == nil {
-					return nil
 				}
 
 				logger.Info("retrying download", zap.Error(err))
@@ -278,13 +279,18 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			return provision.NewRetryInterval(time.Second)
 		}),
 		provision.NewStep("syncVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			if failure := pctx.State.TypedSpec().Value.Failure; failure != "" {
+				return errors.New(failure)
+			}
+
 			if pctx.State.TypedSpec().Value.VmCreateTask != "" {
 				err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VmCreateTask)
-				if err != nil {
-					return err
+				if isTaskFailed(err) {
+					// a failed clone leaves an unknown partial VM behind, reissuing it would need a new vmid
+					return p.giveUp(ctx, logger, pctx, fmt.Errorf("failed to create VM: %w", err))
 				}
 
-				return nil
+				return err
 			}
 
 			if pctx.State.TypedSpec().Value.Uuid == "" {
@@ -600,54 +606,74 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 			return provision.NewRetryInterval(time.Second * 10)
 		}),
-		provision.NewStep("startVM", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-			if pctx.State.TypedSpec().Value.VmStartTask != "" {
-				if err := p.checkTaskStatus(ctx, pctx.State.TypedSpec().Value.VmStartTask); err != nil {
-					if errors.Is(err, errTaskFailed) {
-						// start the VM again on the next attempt instead of checking the same failed task forever
-						pctx.State.TypedSpec().Value.VmStartTask = ""
-
-						return provision.NewRetryError(err, time.Minute)
-					}
-
-					return err
-				}
-			} else {
-				vm, err := p.getVM(ctx, pctx.State.TypedSpec().Value.Node, pctx.State.TypedSpec().Value.Vmid)
-				if err != nil {
-					return err
-				}
-
-				err = vm.CloudInit(
-					ctx,
-					"ide0",
-					pctx.ConnectionParams.JoinConfig,
-					fmt.Sprintf(
-						`instance-id: %s
-local-hostname: %s
-hostname: %s`,
-						pctx.State.TypedSpec().Value.Uuid,
-						pctx.GetRequestID(),
-						pctx.GetRequestID(),
-					),
-					"",
-					"version: 1",
-				)
-				if err != nil {
-					return fmt.Errorf("failed to inject nocloud config: %w", err)
-				}
-
-				task, err := vm.Start(ctx)
-				if err != nil {
-					return err
-				}
-
-				pctx.State.TypedSpec().Value.VmStartTask = string(task.UPID)
-
-				return provision.NewRetryInterval(time.Second * 1)
+		provision.NewStep("startVM", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			if failure := pctx.State.TypedSpec().Value.Failure; failure != "" {
+				return errors.New(failure)
 			}
 
-			return nil
+			spec := pctx.State.TypedSpec().Value
+
+			if spec.VmStartTask != "" {
+				err := p.checkTaskStatus(ctx, spec.VmStartTask)
+				if !isTaskFailed(err) {
+					return err
+				}
+
+				// the VM can be gone already: a previous give up deleted it, but failed waiting for the delete task,
+				// so the failure was never persisted. Give up again, destroyVM treats the missing VM as deleted.
+				vm, vmErr := p.getVM(ctx, spec.Node, spec.Vmid)
+				gone := isAlreadyGoneErr(vmErr)
+
+				if vmErr != nil && !gone {
+					return vmErr
+				}
+
+				// the task failed, but the VM may be up regardless (e.g. it was already running)
+				if !gone && vm.IsRunning() {
+					logger.Info("VM start task failed, but the VM is running", zap.Error(err))
+
+					return nil
+				}
+
+				if gone || !retryStart(spec) {
+					return p.giveUp(ctx, logger, pctx, fmt.Errorf("failed to start VM after %d attempts: %w", spec.StartAttempts+1, err))
+				}
+
+				logger.Info("VM start task failed, retrying", zap.Int32("attempts", spec.StartAttempts), zap.Error(err))
+			}
+
+			vm, err := p.getVM(ctx, spec.Node, spec.Vmid)
+			if err != nil {
+				return err
+			}
+
+			err = vm.CloudInit(
+				ctx,
+				"ide0",
+				pctx.ConnectionParams.JoinConfig,
+				fmt.Sprintf(
+					`instance-id: %s
+local-hostname: %s
+hostname: %s`,
+					pctx.State.TypedSpec().Value.Uuid,
+					pctx.GetRequestID(),
+					pctx.GetRequestID(),
+				),
+				"",
+				"version: 1",
+			)
+			if err != nil {
+				return fmt.Errorf("failed to inject nocloud config: %w", err)
+			}
+
+			task, err := vm.Start(ctx)
+			if err != nil {
+				return err
+			}
+
+			pctx.State.TypedSpec().Value.VmStartTask = string(task.UPID)
+
+			return provision.NewRetryInterval(time.Second * 1)
 		}),
 		provision.NewStep("registerHA", p.ha.RegisterStep),
 		provision.NewStep("syncHARules", p.ha.SyncRulesStep),
@@ -695,40 +721,7 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 		return nil
 	}
 
-	vm, err := p.getVM(ctx, node, machine.TypedSpec().Value.Vmid)
-	if err != nil {
-		// The VM, or the node it was provisioned on, was removed out-of-band
-		// (directly in Proxmox). There is nothing left to tear down, so treat it
-		// as already deprovisioned and still clean up the pool.
-		if isAlreadyGoneErr(err) {
-			logger.Info("VM or its node no longer exists, treating as already deprovisioned",
-				zap.String("node", node), zap.Int32("vmid", machine.TypedSpec().Value.Vmid), zap.Error(err))
-
-			if pool := machine.TypedSpec().Value.Pool; pool != "" {
-				p.cleanupPool(ctx, logger, pool)
-			}
-
-			return nil
-		}
-
-		return err
-	}
-
-	task, err := vm.Stop(ctx)
-	if err != nil {
-		return err
-	}
-
-	if err = p.waitForTaskToFinish(ctx, task); err != nil {
-		return err
-	}
-
-	task, err = vm.Delete(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	if err = p.waitForTaskToFinish(ctx, task); err != nil {
+	if err := p.destroyVM(ctx, logger, node, machine.TypedSpec().Value.Vmid); err != nil {
 		return err
 	}
 
@@ -966,8 +959,89 @@ func (p *Provisioner) checkTaskStatus(ctx context.Context, id string) error {
 	return taskFailure(ctx, t)
 }
 
+func isTaskFailed(err error) bool {
+	return errors.Is(err, errTaskFailed)
+}
+
+// retryStart records one more failed vm.Start() and reports whether another attempt is allowed.
+// On give up the spec is left untouched: giveUp persists the terminal state instead.
+func retryStart(spec *specs.MachineSpec) bool {
+	if spec.StartAttempts+1 >= maxStartAttempts {
+		return false
+	}
+
+	spec.StartAttempts++
+	spec.VmStartTask = ""
+
+	return true
+}
+
+// giveUp destroys the machine VM and records cause as the terminal failure.
+//
+// A plain error returned from a step rolls back all of its state changes, so the failure
+// is persisted through a requeue error first. On the next reconcile the step sees Failure
+// and returns it as a plain error, putting the request into the failed stage without
+// touching Proxmox again.
+func (p *Provisioner) giveUp(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine], cause error) error {
+	spec := pctx.State.TypedSpec().Value
+
+	logger.Error("giving up provisioning, destroying VM", zap.Int32("vmid", spec.Vmid), zap.Error(cause))
+
+	if err := p.destroyVM(ctx, logger, spec.Node, spec.Vmid); err != nil {
+		return fmt.Errorf("%w; failed to destroy VM: %w", cause, err)
+	}
+
+	if pool := spec.Pool; pool != "" {
+		p.cleanupPool(ctx, logger, pool)
+	}
+
+	spec.Vmid = 0
+	spec.Failure = cause.Error()
+	spec.VmStartTask = ""
+
+	return controller.NewRequeueError(cause, time.Second)
+}
+
+// destroyVM stops (unless already stopped) and deletes the VM, treating an already removed VM or node as success.
+func (p *Provisioner) destroyVM(ctx context.Context, logger *zap.Logger, node string, vmid int32) error {
+	vm, err := p.getVM(ctx, node, vmid)
+	if err != nil {
+		// The VM, or the node it was provisioned on, was removed out-of-band
+		// (directly in Proxmox). There is nothing left to tear down.
+		if isAlreadyGoneErr(err) {
+			logger.Info("VM or its node no longer exists, treating as already deleted",
+				zap.String("node", node), zap.Int32("vmid", vmid), zap.Error(err))
+
+			return nil
+		}
+
+		return err
+	}
+
+	if !vm.IsStopped() {
+		task, stopErr := vm.Stop(ctx)
+		if stopErr != nil {
+			return stopErr
+		}
+
+		if stopErr = p.waitForTaskToFinish(ctx, task); stopErr != nil {
+			return stopErr
+		}
+	}
+
+	task, err := vm.Delete(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	return p.waitForTaskToFinish(ctx, task)
+}
+
+// taskPollInterval is how often waitForTaskToFinish polls a task, tests shorten it.
+var taskPollInterval = time.Second * 5
+
 func (p *Provisioner) waitForTaskToFinish(ctx context.Context, t *proxmox.Task) error {
-	ticker := time.NewTicker(time.Second * 5)
+	ticker := time.NewTicker(taskPollInterval)
 
 	defer ticker.Stop()
 

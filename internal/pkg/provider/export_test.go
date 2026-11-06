@@ -76,3 +76,12 @@ func (s *scheduler) Release(requestID string) {
 func ShouldCountSetVMs(data Data, hasSet bool) bool {
 	return shouldCountSetVMs(data, hasSet)
 }
+
+const MaxStartAttempts = maxStartAttempts
+
+func SetTaskPollInterval(t interface{ Cleanup(func()) }, d time.Duration) {
+	prev := taskPollInterval
+	taskPollInterval = d
+
+	t.Cleanup(func() { taskPollInterval = prev })
+}

@@ -333,8 +333,18 @@ until docker exec pve-1 pvecm nodes 2>/dev/null | awk '/pve-2/{found=1} END{exit
 done
 
 # Confirm the cert merge worked: pve-1 should now have a copy of pve-2's signed cert, otherwise
-# the provider's cross-node API proxy will hit TLS verify failures.
-docker exec pve-1 test -f /etc/pve/nodes/pve-2/pve-ssl.pem
+# the provider's cross-node API proxy will hit TLS verify failures. pve-2 can show up in the node
+# list before its cert is replicated through pmxcfs, so wait for it instead of checking once.
+deadline=$(( $(date +%s) + 60 ))
+until docker exec pve-1 test -f /etc/pve/nodes/pve-2/pve-ssl.pem; do
+  if [[ $(date +%s) -gt ${deadline} ]]; then
+    echo "pve-2 node certificate did not appear on pve-1 after pvecm add"
+    docker exec pve-1 ls -la /etc/pve/nodes/pve-2 || true
+    docker exec pve-1 pvecm status || true
+    exit 1
+  fi
+  sleep 2
+done
 
 docker exec pve-1 pvecm status
 
