@@ -13,18 +13,20 @@ type Data struct {
 	HA *ha.Config `yaml:"ha,omitempty"`
 	// NetworkFirewall enables the per-VM firewall (fwbr) on the primary NIC.
 	// Defaults to true. Set false when L2-broadcast services need traffic to bypass fwbr.
-	NetworkFirewall *bool  `yaml:"network_firewall,omitempty"`
-	Node            string `yaml:"node,omitempty"`
-	StorageSelector string `yaml:"storage_selector,omitempty"`
-	NetworkBridge   string `yaml:"network_bridge"`
-	Hugepages       string `yaml:"hugepages,omitempty"`
-	MachineType     string `yaml:"machine_type,omitempty"`
-	Bios            string `yaml:"bios,omitempty"`
-	VGA             string `yaml:"vga,omitempty"`
-	CPUType         string `yaml:"cpu_type,omitempty"`
-	DiskAIO         string `yaml:"disk_aio,omitempty"`
-	DiskCache       string `yaml:"disk_cache,omitempty"`
-	Pool            string `yaml:"pool,omitempty"`
+	NetworkFirewall *bool `yaml:"network_firewall,omitempty"`
+	// Network hands a static address from a pool to every provisioned VM via the nocloud network config.
+	Network         *Network `yaml:"network,omitempty"`
+	Node            string   `yaml:"node,omitempty"`
+	StorageSelector string   `yaml:"storage_selector,omitempty"`
+	NetworkBridge   string   `yaml:"network_bridge"`
+	Hugepages       string   `yaml:"hugepages,omitempty"`
+	MachineType     string   `yaml:"machine_type,omitempty"`
+	Bios            string   `yaml:"bios,omitempty"`
+	VGA             string   `yaml:"vga,omitempty"`
+	CPUType         string   `yaml:"cpu_type,omitempty"`
+	DiskAIO         string   `yaml:"disk_aio,omitempty"`
+	DiskCache       string   `yaml:"disk_cache,omitempty"`
+	Pool            string   `yaml:"pool,omitempty"`
 	// PlacementStrategy selects how a node is chosen for an auto-provisioned VM:
 	// spread (default), fewer-vms, round-robin or binpack.
 	PlacementStrategy string           `yaml:"placement_strategy,omitempty"`
@@ -42,6 +44,26 @@ type Data struct {
 	NUMA              bool             `yaml:"numa,omitempty"`
 	DiskDiscard       bool             `yaml:"disk_discard,omitempty"`
 	DiskSSD           bool             `yaml:"disk_ssd,omitempty"`
+}
+
+// Network holds static network settings handed to every auto-provisioned VM.
+// When unset, VMs keep their default DHCP setup.
+type Network struct {
+	// Addresses is an explicit pool of CIDR addresses; one is allocated per machine.
+	Addresses []string `yaml:"addresses,omitempty"`
+	// Range defines a contiguous address pool as an alternative to Addresses.
+	Range *IPRange `yaml:"range,omitempty"`
+	// Gateway is the default gateway configured on the VM.
+	Gateway string `yaml:"gateway,omitempty"`
+	// Nameservers are the DNS resolvers configured on the VM.
+	Nameservers []string `yaml:"nameservers,omitempty"`
+}
+
+// IPRange is a contiguous inclusive address pool.
+type IPRange struct {
+	Start  string `yaml:"start"`
+	End    string `yaml:"end"`
+	Prefix int    `yaml:"prefix"`
 }
 
 // AdditionalDisk represents an additional disk configuration.

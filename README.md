@@ -83,13 +83,59 @@ spec:
   type: auto-provision
   provider: proxmox
   config:
-    cpu: 4
+    cores: 4
     memory: 8192 # in MB
-    diskSize: 40 # in GB
+    disk_size: 40 # in GB
+    storage_selector: 'name == "local-lvm"'
     # Add other Proxmox-specific options as needed
 ```
 
 Apply the machine class to your Omni account using the Omni UI or CLI.
+
+### Static IP Allocation
+
+Add a `network` section to allocate one static IP address per auto-provisioned VM. Use exactly one pool form: `addresses` with CIDR strings, or an inclusive `range` with `start`, `end`, and `prefix`.
+The provider assigns the lowest free address first, stores it on the machine, and configures it on the primary NIC through the NoCloud network config on the cloud-init ISO. Talos reads this config at boot. Additional NICs are not covered.
+
+Set `gateway` and `nameservers` when needed. Both keys are optional; the gateway must use the same address family as the pool. Without the `network` section, VMs continue to use DHCP.
+
+Example with an explicit pool:
+
+```yaml
+spec:
+  type: auto-provision
+  provider: proxmox
+  config:
+    cores: 4
+    memory: 8192
+    disk_size: 40
+    storage_selector: 'name == "local-lvm"'
+    network:
+      gateway: 10.219.1.1
+      nameservers:
+        - 10.219.1.1
+      addresses:
+        - 10.219.1.41/24
+        - 10.219.1.42/24
+        - 10.219.1.43/24
+```
+
+Use this alternative `range` form instead of `addresses`:
+
+```yaml
+    network:
+      gateway: 10.219.1.1
+      nameservers:
+        - 10.219.1.1
+      range:
+        start: 10.219.1.41
+        end: 10.219.1.60
+        prefix: 24
+```
+
+The provider records each address in the VM description with the `omni-static-ip:` marker. It scans provider-created VMs with a machine-request tag to find free addresses, so allocation survives provider restarts and concurrent provisioning. Deprovisioning frees the address. Anyone who can edit VM descriptions or tags in the Proxmox cluster can influence this bookkeeping, so treat Proxmox users as trusted for IPAM purposes.
+
+For clusters in LANs without DHCP, or small clusters with hand-managed addressing, this removes manual per-VM IP work after scaling.
 
 ### Scaling a Cluster with the Machine Class
 

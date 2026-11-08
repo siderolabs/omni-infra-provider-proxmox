@@ -4,7 +4,34 @@
 
 package provider
 
-import "time"
+import (
+	"context"
+	"net/netip"
+	"time"
+
+	"github.com/luthermonson/go-proxmox"
+)
+
+type IPAllocator = ipAllocator
+
+func NewIPAllocator() *IPAllocator { return newIPAllocator() }
+
+func (a *ipAllocator) Allocate(ctx context.Context, client *proxmox.Client, candidates []netip.Prefix, requestID string) (netip.Prefix, error) {
+	return a.allocate(ctx, client, candidates, requestID)
+}
+
+func (a *ipAllocator) Release(requestID string) { a.release(requestID) }
+
+func ExpandNetworkConfig(n *Network) ([]netip.Prefix, error) { return expandNetworkConfig(n) }
+func BuildVMDescription(ip netip.Prefix) string              { return buildVMDescription(ip) }
+func ParseStaticIPMarker(description string) (netip.Prefix, bool) {
+	return parseStaticIPMarker(description)
+}
+
+func BuildNocloudNetworkConfig(ip netip.Prefix, gateway string, nameservers []string, mac string) (string, error) {
+	return buildNocloudNetworkConfig(ip, gateway, nameservers, mac)
+}
+func ParsePrimaryMAC(net0 string) string { return parsePrimaryMAC(net0) }
 
 type NodeStatus = nodeStatus
 

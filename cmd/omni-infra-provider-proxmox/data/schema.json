@@ -43,6 +43,33 @@
       "type": "string",
       "description": "Network bridge to attach to the VM, ex. vmbr0"
     },
+    "network": {
+      "type": "object",
+      "description": "Static network configuration for the primary NIC. When set, the provider allocates one address per machine from the pool and hands it to the VM via the nocloud network config; use it in LANs without DHCP. When unset, VMs use DHCP.",
+      "properties": {
+        "addresses": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Explicit pool of CIDR addresses, one per machine, e.g. 10.219.1.41/24. Exclusive with 'range'."
+        },
+        "range": {
+          "type": "object",
+          "description": "Contiguous address pool, inclusive bounds. Exclusive with 'addresses'.",
+          "properties": {
+            "start": { "type": "string", "description": "First address, e.g. 10.219.1.41" },
+            "end": { "type": "string", "description": "Last address, inclusive, e.g. 10.219.1.60" },
+            "prefix": { "type": "integer", "minimum": 0, "description": "Prefix length, e.g. 24" }
+          },
+          "required": ["start", "end", "prefix"]
+        },
+        "gateway": { "type": "string", "description": "Default gateway, e.g. 10.219.1.1" },
+        "nameservers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "DNS resolvers for the VM"
+        }
+      }
+    },
     "vlan": {
       "type": "integer",
       "minimum": 0,

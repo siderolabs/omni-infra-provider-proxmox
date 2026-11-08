@@ -6,11 +6,10 @@ package specs
 
 import (
 	fmt "fmt"
-	io "io"
-
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	io "io"
 )
 
 const (
@@ -36,6 +35,7 @@ func (m *MachineSpec) CloneVT() *MachineSpec {
 	r.Vmid = m.Vmid
 	r.Pool = m.Pool
 	r.HaRegistered = m.HaRegistered
+	r.IpAddress = m.IpAddress
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
 		copy(r.unknownFields, m.unknownFields)
@@ -86,6 +86,9 @@ func (this *MachineSpec) EqualVT(that *MachineSpec) bool {
 	if this.HaRegistered != that.HaRegistered {
 		return false
 	}
+	if this.IpAddress != that.IpAddress {
+		return false
+	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
 
@@ -125,6 +128,13 @@ func (m *MachineSpec) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.IpAddress) > 0 {
+		i -= len(m.IpAddress)
+		copy(dAtA[i:], m.IpAddress)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.IpAddress)))
+		i--
+		dAtA[i] = 0x72
 	}
 	if m.HaRegistered {
 		i--
@@ -254,6 +264,10 @@ func (m *MachineSpec) SizeVT() (n int) {
 	}
 	if m.HaRegistered {
 		n += 2
+	}
+	l = len(m.IpAddress)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	n += len(m.unknownFields)
 	return n
@@ -615,6 +629,38 @@ func (m *MachineSpec) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.HaRegistered = bool(v != 0)
+		case 14:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IpAddress", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IpAddress = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])
