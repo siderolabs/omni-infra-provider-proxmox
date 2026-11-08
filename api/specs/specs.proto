@@ -19,4 +19,6 @@ message MachineSpec {
   int32 vmid = 11;
   string pool = 12;
   bool ha_registered = 13;
+  // Allocated static address in CIDR form, empty when DHCP.
+  string ip_address = 14;
 }

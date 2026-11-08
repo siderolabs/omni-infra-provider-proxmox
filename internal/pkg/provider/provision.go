@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -45,6 +46,7 @@ type Provisioner struct {
 	ha                    *ha.Manager
 	proxmoxClient         *proxmox.Client
 	scheduler             *scheduler
+	ipam                  *ipAllocator
 	pendingISODownloads   map[string]string
 	pendingISODownloadsMu sync.Mutex
 	poolMu                sync.Mutex
@@ -55,6 +57,7 @@ func NewProvisioner(proxmoxClient *proxmox.Client) *Provisioner {
 	return &Provisioner{
 		proxmoxClient:       proxmoxClient,
 		scheduler:           newScheduler(),
+		ipam:                newIPAllocator(),
 		ha:                  ha.NewManager(proxmoxClient),
 		pendingISODownloads: make(map[string]string),
 	}
@@ -299,6 +302,46 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return err
 			}
 
+			var staticIP netip.Prefix
+
+			if data.Network != nil || pctx.State.TypedSpec().Value.IpAddress != "" {
+				var candidates []netip.Prefix
+
+				if data.Network != nil {
+					candidates, err = expandNetworkConfig(data.Network)
+					if err != nil {
+						return fmt.Errorf("invalid network config: %w", err)
+					}
+				}
+
+				if cidr := pctx.State.TypedSpec().Value.IpAddress; cidr != "" {
+					staticIP, err = netip.ParsePrefix(cidr)
+					if err != nil {
+						return fmt.Errorf("invalid allocated IP %q: %w", cidr, err)
+					}
+
+					p.ipam.reserve(pctx.GetRequestID(), staticIP)
+				} else {
+					staticIP, err = p.ipam.allocate(ctx, p.proxmoxClient, candidates, pctx.GetRequestID())
+					if err != nil {
+						return err
+					}
+
+					pctx.State.TypedSpec().Value.IpAddress = staticIP.String()
+				}
+			}
+
+			// Keep the reservation only after Proxmox accepts the VM creation task.
+			vmCreateAccepted := false
+
+			if staticIP.IsValid() {
+				defer func() {
+					if !vmCreateAccepted {
+						p.ipam.release(pctx.GetRequestID())
+					}
+				}()
+			}
+
 			node, err := p.proxmoxClient.Node(ctx, pctx.State.TypedSpec().Value.Node)
 			if err != nil {
 				return err
@@ -433,7 +476,13 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			}
 
 			machineRequestSet, _ := pctx.GetMachineRequestSetID()
-			if value, ok := buildTagsOption(data.Tags, machineRequestSet); ok {
+
+			vmTagID := machineRequestSet
+			if vmTagID == "" && staticIP.IsValid() {
+				vmTagID = pctx.GetRequestID()
+			}
+
+			if value, ok := buildTagsOption(data.Tags, vmTagID); ok {
 				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
 					Name:  "tags",
 					Value: value,
@@ -589,11 +638,19 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			}
 
 			vmOptions = append(vmOptions, buildUSBDeviceOptions(data.USBDevices)...)
+			if staticIP.IsValid() {
+				vmOptions = append(vmOptions, proxmox.VirtualMachineOption{
+					Name:  "description",
+					Value: buildVMDescription(staticIP),
+				})
+			}
 
 			task, err := node.NewVirtualMachine(ctx, vmid, vmOptions...)
 			if err != nil {
 				return err
 			}
+
+			vmCreateAccepted = true
 
 			pctx.State.TypedSpec().Value.VmCreateTask = string(task.UPID)
 			pctx.State.TypedSpec().Value.Vmid = int32(vmid)
@@ -618,6 +675,37 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return err
 				}
 
+				networkConfig := "version: 1"
+
+				if cidr := pctx.State.TypedSpec().Value.IpAddress; cidr != "" {
+					var data Data
+
+					if err = pctx.UnmarshalProviderData(&data); err != nil {
+						return err
+					}
+
+					if data.Network == nil {
+						return fmt.Errorf("machine has static IP %q allocated but the network config was removed from the machine request provider data; "+
+							"restore the network section to keep gateway/DNS configured", cidr)
+					}
+
+					if err = vm.Ping(ctx); err != nil {
+						return fmt.Errorf("failed to read VM config: %w", err)
+					}
+
+					var staticIP netip.Prefix
+
+					staticIP, err = netip.ParsePrefix(cidr)
+					if err != nil {
+						return fmt.Errorf("invalid allocated IP %q: %w", cidr, err)
+					}
+
+					networkConfig, err = buildNocloudNetworkConfig(staticIP, data.Network.Gateway, data.Network.Nameservers, parsePrimaryMAC(vm.VirtualMachineConfig.Nets["net0"]))
+					if err != nil {
+						return err
+					}
+				}
+
 				err = vm.CloudInit(
 					ctx,
 					"ide0",
@@ -631,7 +719,7 @@ hostname: %s`,
 						pctx.GetRequestID(),
 					),
 					"",
-					"version: 1",
+					networkConfig,
 				)
 				if err != nil {
 					return fmt.Errorf("failed to inject nocloud config: %w", err)
@@ -659,6 +747,7 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 	// release up front: a request torn down before its VM materializes returns
 	// at the Vmid == 0 check below.
 	p.scheduler.release(machineRequest.Metadata().ID())
+	p.ipam.release(machineRequest.Metadata().ID())
 
 	if machine.TypedSpec().Value.Vmid == 0 {
 		return nil
