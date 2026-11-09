@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	cel.dev/cel-go v0.33.2
-	github.com/cosi-project/runtime v1.16.4
+	github.com/cosi-project/runtime v1.17.0
 	github.com/google/uuid v1.6.0
 	github.com/luthermonson/go-proxmox v0.8.2
 	github.com/planetscale/vtprotobuf v0.6.1-0.20260702190614-8ae5a48058df
@@ -13,7 +13,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/zap v1.28.0
-	go.yaml.in/yaml/v4 v4.0.0-rc.9
+	go.yaml.in/yaml/v4 v4.0.0
 	google.golang.org/protobuf v1.36.12
 )
 
