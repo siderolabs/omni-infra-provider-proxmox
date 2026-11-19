@@ -1,5 +1,7 @@
 cel.dev/cel-go v0.33.2 h1:eAcEdBguc6AFrGbPOyE0g168Uey4kKFW9J6qsBLSeMU=
 cel.dev/cel-go v0.33.2/go.mod h1:DnVip7tpJSsgZymwfT+m1tnEVy3ivAjSMXPx12YrMkU=
+cel.dev/cel-go v0.33.4 h1:9hd5BRPQZwj81qOddEXh0WhE1N3shkG3ad89pSqk+iU=
+cel.dev/cel-go v0.33.4/go.mod h1:DnVip7tpJSsgZymwfT+m1tnEVy3ivAjSMXPx12YrMkU=
 cel.dev/expr v0.25.3 h1:A2jO8jwOugrrovveCWfj0KEZOfqiLgAcwjpHPhzIGw0=
 cel.dev/expr v0.25.3/go.mod h1:hrXvqGP6G6gyx8UAHSHJ5RGk//1Oj5nXQ2NI02Nrsg4=
 github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 h1:m2xcjRABtG288vnlV3U/PKh/HnPURxZp50RKNUwBxM8=
@@ -40,6 +42,8 @@ github.com/containernetworking/cni v1.3.1 h1:gnHlU/YC1bJcS+CSh+pYQKeuu4O4gsMGW1N
 github.com/containernetworking/cni v1.3.1/go.mod h1:OtVXL0yXMfQb+p93OC/vRuhjpxsO1gAV0smjt28UQUQ=
 github.com/cosi-project/runtime v1.17.0 h1:e0CmblUE8cn/HexfBlwdWcDlaXUrf53Djsb7G0b59j0=
 github.com/cosi-project/runtime v1.17.0/go.mod h1:JiSn2h1RyCPR1CvCbw7O2puw7KeGBBchhZMlnNrO0M0=
+github.com/cosi-project/runtime v1.17.1 h1:N4yr9QbUPivm5joJR6mR7Jtd/uTAgsXpcsXKacPIA6k=
+github.com/cosi-project/runtime v1.17.1/go.mod h1:JiSn2h1RyCPR1CvCbw7O2puw7KeGBBchhZMlnNrO0M0=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -156,6 +160,8 @@ github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de h1:9TO3cAIGXtEhn
 github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de/go.mod h1:zAbeS9B/r2mtpb6U+EI2rYA5OAXxsYw6wTamcNW+zcE=
 github.com/luthermonson/go-proxmox v0.8.2 h1:lh8FVu1cmF+zFfGM2sbf0QrUUJxAtcXbQsTQPNh0I00=
 github.com/luthermonson/go-proxmox v0.8.2/go.mod h1:Q6ByFv9Zak9NvJwZJ36HMN5qwIZVj0isxf8u4YIk6lE=
+github.com/luthermonson/go-proxmox v0.10.0 h1:r0IMJi2mg+kCoy/wZI7+CxeIWrMxe/MxW9EKcWg3EmQ=
+github.com/luthermonson/go-proxmox v0.10.0/go.mod h1:Q6ByFv9Zak9NvJwZJ36HMN5qwIZVj0isxf8u4YIk6lE=
 github.com/magefile/mage v1.17.2 h1:fyXVu1eadI8Ap1HCCNgEhJ5McIWiYhLR8uol64ZZc40=
 github.com/magefile/mage v1.17.2/go.mod h1:Yj51kqllmsgFpvvSzgrZPK9WtluG3kUhFaBUVLo4feA=
 github.com/mdlayher/ethtool v0.7.0 h1:cZ/so6IXQe8AV1ML2St/iz77ou8tkoMj3qXcmERLhrE=
@@ -232,6 +238,8 @@ github.com/siderolabs/net v0.4.0 h1:1bOgVay/ijPkJz4qct98nHsiB/ysLQU0KLoBC4qLm7I=
 github.com/siderolabs/net v0.4.0/go.mod h1:/ibG+Hm9HU27agp5r9Q3eZicEfjquzNzQNux5uEk0kM=
 github.com/siderolabs/omni/client v1.13.0-beta.1.0.20261106153336-426026428d4d h1:ZJIH3jNTTUWnadnaqYXVO8LstKoBii3S3mjpiUr1x+Q=
 github.com/siderolabs/omni/client v1.13.0-beta.1.0.20261106153336-426026428d4d/go.mod h1:6OJ5jayB59w/Vel/enZwEWlEX2Z1LhuYTrFXyK0TuGE=
+github.com/siderolabs/omni/client v1.13.3 h1:IQyGUi2O5kllIP4PqdcP0SqyUfY0DMsdmjgbFs0aGVM=
+github.com/siderolabs/omni/client v1.13.3/go.mod h1:d6kbfpjjJJ/jAe3Bb0aKxHsleyURWt/Y7LUxk97KYYY=
 github.com/siderolabs/proto-codec v0.1.4 h1:AcrLot/251qAa35GYhSqDeEKF3bygOlNaYJSrl7MPNQ=
 github.com/siderolabs/proto-codec v0.1.4/go.mod h1:frX2VEBSrZwzGxEdT+AMSjiWr6ySY/rCSXJxD0z9kxQ=
 github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIGsr8Q=
@@ -240,6 +248,8 @@ github.com/siderolabs/siderolink v0.3.18 h1:Pzz47qsgnVzJK6oIpjzr7BOZHMXePtPH08Jy
 github.com/siderolabs/siderolink v0.3.18/go.mod h1:yApRaEuwExyiyA31c4svnCZNirumfgYSHN4XnIxJIK0=
 github.com/siderolabs/talos/pkg/machinery v1.15.0-alpha.2.0.20261102184104-ab534fcfa315 h1:d7ROJB6WKYkhc7cbRouIsWN8FcFqro+GUeAj/OPNvOc=
 github.com/siderolabs/talos/pkg/machinery v1.15.0-alpha.2.0.20261102184104-ab534fcfa315/go.mod h1:GQosqOvbQR1j8usRZQrQf83R/+WUGuLnJHR32jflU94=
+github.com/siderolabs/talos/pkg/machinery v1.15.0-beta.0 h1:sDpgD9W93jIno5YTgpLoWPedskTq4sFyB3jh4noj0VI=
+github.com/siderolabs/talos/pkg/machinery v1.15.0-beta.0/go.mod h1:5hl6TcXTKrCLMpB5nHAD2zFF1VyS+5JAJGcH5vUsg98=
 github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
 github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
