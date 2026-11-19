@@ -21,4 +21,6 @@ message MachineSpec {
   bool ha_registered = 13;
   int32 start_attempts = 14;
   string failure = 15;
+  // Allocated static address in CIDR form, empty when DHCP.
+  string ip_address = 16;
 }
